@@ -185,10 +185,9 @@ async def async_main(begin=1, clean=False, silent=False):
                 # some transactions have duplicate IDs
                 # keep only the last one
                 # (delete previous with same IDs)
-                d = session.execute(
+                await session.execute(
                     delete(Swap, Swap.id.in_([Decimal(s.id) for s in swaps])))
                 session.add_all(swaps)
-                await d
                 pending = session.commit()
         if pending:
             await pending

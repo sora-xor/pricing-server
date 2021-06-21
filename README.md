@@ -34,3 +34,8 @@ http://localhost/graph - GraphQL API
 http://localhost/pairs/ - pricing data of all pairs
 
 http://localhost/pairs/{BASE}-{QUOTE}- pricing data for specific pair. For example: http://localhost/pairs/XOR-PSWAP/
+
+## System requirements
+
+8GB RAM
+10GB free disk space
