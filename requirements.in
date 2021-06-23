@@ -4,6 +4,7 @@ asyncpg
 fastapi
 graphene
 graphene-sqlalchemy
+gunicorn
 python-decouple
 scalecodec
 substrate-interface
