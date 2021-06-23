@@ -1,0 +1,43 @@
+version: "3.4"  # optional since v1.27.0
+volumes:
+  chain:
+
+services:
+  postgres:
+    image: postgres
+    environment:
+      POSTGRES_DB: "${DB_NAME}"
+      POSTGRES_USER: "${DB_USER}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD}"
+    ports:
+      - "127.0.0.1:5432:5432"
+  substrate:
+    image: sora2/substrate:1.0.0
+    ports:
+      - "127.0.0.1:9933:9933"
+      - "127.0.0.1:9944:9944"
+    volumes:
+      - chain:/chain
+    command: --name sora2-node --chain main --base-path /chain --unsafe-ws-external --unsafe-rpc-external --pruning archive --rpc-cors all
+    healthcheck:
+      test: >-
+        curl -H 'Content-Type: application/json' -d '{"id": 1, "jsonrpc": "2.0", "method": "system_health", "params": []}' 127.0.0.1:9933 | grep -E 'result'
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 300s
+  import:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_started
+      substrate:
+        condition: service_healthy
+    command: "env SUBSTRATE_URL=ws://substrate:9944 DATABASE_URL=postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@postgres/${DB_NAME} python run_node_processing.py -f"
+  web:
+    build: .
+    depends_on:
+      - "postgres"
+    ports:
+      - "80:8000"
+    command: "env DATABASE_URL=postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@postgres/${DB_NAME} uvicorn web:app --host 0.0.0.0"

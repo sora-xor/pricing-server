@@ -1,0 +1,11 @@
+aiomysql
+alembic
+asyncpg
+fastapi
+graphene
+graphene-sqlalchemy
+python-decouple
+scalecodec
+substrate-interface
+tqdm
+uvicorn
