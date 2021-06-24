@@ -44,4 +44,4 @@ services:
       - "postgres"
     ports:
       - "80:8000"
-    command: "env DATABASE_URL=postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@postgres/${DB_NAME} uvicorn web:app --host 0.0.0.0"
+    command: "env DATABASE_URL=postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@postgres/${DB_NAME} gunicorn -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0 web:app"

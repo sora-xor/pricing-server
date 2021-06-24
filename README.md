@@ -31,6 +31,13 @@ This will start Substrate Node, PostreSQL and Web server and will start importin
 
 http://localhost/graph - GraphQL API
 
-http://localhost/pairs/ - pricing data of all pairs
+http://localhost/pairs/ - Pricing data of all pairs
 
-http://localhost/pairs/{BASE}-{QUOTE}- pricing data for specific pair. For example: http://localhost/pairs/XOR-PSWAP/
+http://localhost/pairs/{BASE}-{QUOTE}- Pricing data for specific pair. For example: http://localhost/pairs/XOR-PSWAP/
+
+http://localhost/healthcheck - Healthcheck endpoint. Returns 200 OK. Can be used to check if web server is running and accepting connections.
+
+## System requirements
+
+8GB RAM
+10GB free disk space

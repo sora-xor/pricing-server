@@ -4,7 +4,7 @@ from fastapi.responses import HTMLResponse
 from graphene import Enum, Int
 from graphene_sqlalchemy import SQLAlchemyObjectType
 from graphql.execution.executors.asyncio import AsyncioExecutor
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import and_, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -100,28 +100,29 @@ app = FastAPI()
 @app.get("/", response_class=HTMLResponse)
 async def root():
     return """
-    <html>
-        <head>
-            <title>SORA Pricing Server</title>
-        </head>
-        <body>
+        <!DOCTYPE html>
+        <title>SORA Pricing Server</title>
+        <h1>SORA Pricing Server</h1>
         <ul>
         <li><a href="/pairs/">Pair Summary</a></li>
         <li><a href="/pairs/XOR-PSWAP">Specific Pair Info</a></li>
         <li><a href="/graph">GraphQL API</a></li>
         <li><a href="/docs">Docs</a></li>
         </ul>
-        </body>
-    </html>
-    """
+        """
 
 
 @app.get("/pairs/")
 async def pairs():
     async with async_session() as session:
+        # get last swap
+        last = (await
+                session.execute(select(func.max(Swap.timestamp)))).scalar()
+        if not last:
+            # no data imported yet
+            return {}
         # 24 hours ago since last imported transaction timestamp
-        last_24h = (await session.execute(select(func.max(Swap.timestamp))
-                                          )).scalar() - 24 * 3600
+        last_24h = last - 24 * 3600
         # fetch all pairs info
         pairs = {}
         for p, in await session.execute(
@@ -175,19 +176,21 @@ async def pairs():
 
 
 class PairResponse(BaseModel):
-    base_id: str
-    base_name: str
-    base_symbol: str
-    quote_id: str
-    quote_name: str
-    quote_symbol: str
-    last_price: float
-    base_volume: int
-    quote_volume: int
+    base_id: str = Field(
+        "0x0200000000000000000000000000000000000000000000000000000000000000")
+    base_name: str = Field("SORA")
+    base_symbol: str = Field("XOR")
+    quote_id: str = Field(
+        "0x0200050000000000000000000000000000000000000000000000000000000000")
+    quote_name: str = Field("Polkaswap")
+    quote_symbol: str = Field(example="PSWAP")
+    last_price: float = Field(example=12.34)
+    base_volume: int = Field(example=1000)
+    quote_volume: int = Field(example=1000)
 
 
 @app.get("/pairs/{base}-{quote}/", response_model=PairResponse)
-async def pair(base, quote):
+async def pair(base: str, quote: str):
     async with async_session() as session:
         # will need it later
         last_24h = session.execute(select(func.max(Swap.timestamp)))
