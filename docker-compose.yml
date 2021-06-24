@@ -3,7 +3,6 @@ volumes:
   chain:
 
 services:
-
   postgres:
     image: postgres
     environment:
@@ -12,7 +11,6 @@ services:
       POSTGRES_PASSWORD: "${DB_PASSWORD}"
     ports:
       - "127.0.0.1:5432:5432"
-
   substrate:
     image: sora2/substrate:1.0.0
     ports:
@@ -28,7 +26,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 300s
-
   import:
     build: .
     depends_on:
@@ -37,7 +34,6 @@ services:
       substrate:
         condition: service_healthy
     command: "env SUBSTRATE_URL=ws://substrate:9944 DATABASE_URL=postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@postgres/${DB_NAME} python run_node_processing.py -f"
-
   web:
     build: .
     depends_on:
