@@ -8,7 +8,6 @@ from time import sleep
 from typing import Dict, List
 
 import decouple
-import requests
 from scalecodec.type_registry import load_type_registry_file
 from sqlalchemy import delete, func, update
 from sqlalchemy.exc import IntegrityError
@@ -79,27 +78,29 @@ def process_events(dataset, new_map, result, grouped_events):
                     dataset.append(asdict(tx))
 
 
-async def get_or_create_token(session, hash: str):
+async def get_or_create_token(substrate, session, hash: str):
     for token, in await (session.execute(
             select(Token).where(Token.hash == hash))):
         return token
-    data = requests.get('https://sorascan.com/api/v1/asset/' +
-                        hash).json()['data']['attributes']
-    a = Token(hash=hash,
-              id=data['id'],
-              name=data['name'],
-              symbol=data['symbol'],
-              decimals=data['precision'])
-    session.add(a)
-    await session.commit()
-    return a
+    assets = substrate.rpc_request('assets_listAssetInfos', [])['result']
+    for a in assets:
+        if a['asset_id'] == hash:
+            a = Token(hash=hash,
+                      name=a['name'],
+                      symbol=a['symbol'],
+                      decimals=int(a['precision']))
+            session.add(a)
+            await session.commit()
+            return a
+    logging.error("Asset not found: " + hash)
+    raise RuntimeError("Asset not found: " + hash)
 
 
-async def get_or_create_pair(session, pairs, token0_hash: str,
+async def get_or_create_pair(substrate, session, pairs, token0_hash: str,
                              token1_hash: str):
     if (token0_hash, token1_hash) not in pairs:
-        from_token = get_or_create_token(session, token0_hash)
-        to_token = get_or_create_token(session, token1_hash)
+        from_token = get_or_create_token(substrate, session, token0_hash)
+        to_token = get_or_create_token(substrate, session, token1_hash)
         p = Pair(
             token0_id=(await from_token).id,
             token1_id=(await to_token).id,
@@ -173,7 +174,7 @@ async def async_main(begin=1, clean=False, silent=False):
             swaps = []
             for tx in dataset:
                 tx['pair_id'] = (await
-                                 get_or_create_pair(session, pairs,
+                                 get_or_create_pair(substrate, session, pairs,
                                                     tx.pop('asset1_type'),
                                                     tx.pop('asset2_type'))).id
                 if tx['asset2_amount']:
