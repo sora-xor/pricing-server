@@ -1,23 +1,20 @@
-import decouple
-from sqlalchemy import (BigInteger, Column, Float, ForeignKey, Index, Integer,
-                        Numeric, String)
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy import (
+    BigInteger,
+    Column,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+)
 from sqlalchemy.orm import backref, declarative_base, relationship
-
-DEBUG = decouple.config('DEBUG', default=False, cast=bool)
 
 Base = declarative_base()
 
 
-def get_db_engine():
-    return create_async_engine(
-        decouple.config('DATABASE_URL'),
-        echo=DEBUG,
-    )
-
-
 class Token(Base):
-    __tablename__ = 'token'
+    __tablename__ = "token"
 
     id = Column(Integer, primary_key=True)
     hash = Column(String(66), unique=True, nullable=False)
@@ -28,26 +25,26 @@ class Token(Base):
 
 
 class Pair(Base):
-    __tablename__ = 'pair'
+    __tablename__ = "pair"
     id = Column(Integer, primary_key=True)
     token0_id = Column(ForeignKey("token.id"), nullable=False)
     token1_id = Column(ForeignKey("token.id"), nullable=False)
-    token0 = relationship(Token,
-                          foreign_keys=[token0_id],
-                          backref=backref('pairs0',
-                                          uselist=True,
-                                          cascade='delete,all'))
-    token1 = relationship(Token,
-                          foreign_keys=[token1_id],
-                          backref=backref('pairs1',
-                                          uselist=True,
-                                          cascade='delete,all'))
+    token0 = relationship(
+        Token,
+        foreign_keys=[token0_id],
+        backref=backref("pairs0", uselist=True, cascade="delete,all"),
+    )
+    token1 = relationship(
+        Token,
+        foreign_keys=[token1_id],
+        backref=backref("pairs1", uselist=True, cascade="delete,all"),
+    )
     token0_volume = Column(Float)
     token1_volume = Column(Float)
 
 
 class Swap(Base):
-    __tablename__ = 'swap'
+    __tablename__ = "swap"
 
     id = Column(Numeric(20), primary_key=True)
     block = Column(Integer, nullable=False)
@@ -59,10 +56,9 @@ class Swap(Base):
     price = Column(Float)
     filter_mode = Column(String(32), nullable=False)
     swap_fee_amount = Column(Numeric(21))
-    pair = relationship(Pair,
-                        backref=backref('swaps',
-                                        uselist=True,
-                                        cascade='delete,all'))
+    pair = relationship(
+        Pair, backref=backref("swaps", uselist=True, cascade="delete,all")
+    )
 
 
-Index('idx_swap_pair_timestamp_desc', Swap.pair_id, Swap.timestamp.desc())
+Index("idx_swap_pair_timestamp_desc", Swap.pair_id, Swap.timestamp.desc())
