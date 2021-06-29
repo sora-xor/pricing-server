@@ -197,6 +197,9 @@ async def async_main(begin=1, clean=False, silent=False):
             swaps = []
             for tx in dataset:
                 try:
+                    # skip transactions with invalid asset type 0x000....
+                    if not int(tx["asset1_type"], 16) or not int(tx["asset2_type"], 16):
+                        continue
                     tx["pair_id"] = (
                         await get_or_create_pair(
                             substrate,
