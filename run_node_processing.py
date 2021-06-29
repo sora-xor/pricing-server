@@ -196,20 +196,30 @@ async def async_main(begin=1, clean=False, silent=False):
             # prepare data to be INSERTed
             swaps = []
             for tx in dataset:
-                tx["pair_id"] = (
-                    await get_or_create_pair(
-                        substrate,
-                        session,
-                        pairs,
-                        tx.pop("asset1_type"),
-                        tx.pop("asset2_type"),
+                try:
+                    tx["pair_id"] = (
+                        await get_or_create_pair(
+                            substrate,
+                            session,
+                            pairs,
+                            tx.pop("asset1_type"),
+                            tx.pop("asset2_type"),
+                        )
+                    ).id
+                    if tx["asset2_amount"]:
+                        tx["price"] = tx["asset1_amount"] / tx["asset2_amount"]
+                    tx["token0_amount"] = tx.pop("asset1_amount")
+                    tx["token1_amount"] = tx.pop("asset2_amount")
+                    swaps.append(Swap(block=block, **tx))
+                except Exception as e:
+                    logging.error(
+                        "Failed to process transaction 0x%x, %s in block %i:",
+                        tx["id"],
+                        tx,
+                        block,
                     )
-                ).id
-                if tx["asset2_amount"]:
-                    tx["price"] = tx["asset1_amount"] / tx["asset2_amount"]
-                tx["token0_amount"] = tx.pop("asset1_amount")
-                tx["token1_amount"] = tx.pop("asset2_amount")
-                swaps.append(Swap(block=block, **tx))
+                    logging.error(e)
+                    raise
             if swaps:
                 # some transactions have duplicate IDs
                 # keep only the last one
