@@ -4,28 +4,26 @@ import logging
 import sys
 from dataclasses import asdict
 from decimal import Decimal
-from time import sleep
+from time import sleep, time
 from typing import Dict, List
 
 import decouple
 from scalecodec.type_registry import load_type_registry_file
-from sqlalchemy import delete, func, update
+from sqlalchemy import and_, delete, func, update
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy.orm import selectinload, sessionmaker
+from sqlalchemy.orm import selectinload
 from substrateinterface import SubstrateInterface
 from tqdm import trange
 
-from models import Base, Pair, Swap, Token, get_db_engine
-from processing import (get_processing_functions, get_timestamp,
-                        should_be_processed)
+from models import Base, Pair, Swap, Token
+from processing import get_processing_functions, get_timestamp, should_be_processed
 
 
 def connect_to_substrate_node():
     try:
         substrate = SubstrateInterface(
-            url=decouple.config('SUBSTRATE_URL', "ws://127.0.0.1:9944"),
+            url=decouple.config("SUBSTRATE_URL", "ws://127.0.0.1:9944"),
             type_registry_preset="default",
             type_registry=load_type_registry_file("custom_types.json"),
         )
@@ -41,8 +39,9 @@ def get_events_from_block(substrate, block_id: int):
     block_hash = substrate.get_block_hash(block_id=block_id)
 
     # Retrieve extrinsics in block
-    result = substrate.get_runtime_block(block_hash=block_hash,
-                                         ignore_decoding_errors=True)
+    result = substrate.get_runtime_block(
+        block_hash=block_hash, ignore_decoding_errors=True
+    )
     events = substrate.get_events(block_hash)
 
     grouped_events: Dict[int, List] = {}
@@ -79,16 +78,18 @@ def process_events(dataset, new_map, result, grouped_events):
 
 
 async def get_or_create_token(substrate, session, hash: str):
-    for token, in await (session.execute(
-            select(Token).where(Token.hash == hash))):
+    q = session.execute(select(Token).where(Token.hash == hash))
+    for (token,) in await q:
         return token
-    assets = substrate.rpc_request('assets_listAssetInfos', [])['result']
+    assets = substrate.rpc_request("assets_listAssetInfos", [])["result"]
     for a in assets:
-        if a['asset_id'] == hash:
-            a = Token(hash=hash,
-                      name=a['name'],
-                      symbol=a['symbol'],
-                      decimals=int(a['precision']))
+        if a["asset_id"] == hash:
+            a = Token(
+                hash=hash,
+                name=a["name"],
+                symbol=a["symbol"],
+                decimals=int(a["precision"]),
+            )
             session.add(a)
             await session.commit()
             return a
@@ -96,15 +97,13 @@ async def get_or_create_token(substrate, session, hash: str):
     raise RuntimeError("Asset not found: " + hash)
 
 
-async def get_or_create_pair(substrate, session, pairs, token0_hash: str,
-                             token1_hash: str):
+async def get_or_create_pair(
+    substrate, session, pairs, token0_hash: str, token1_hash: str
+):
     if (token0_hash, token1_hash) not in pairs:
         from_token = get_or_create_token(substrate, session, token0_hash)
         to_token = get_or_create_token(substrate, session, token1_hash)
-        p = Pair(
-            token0_id=(await from_token).id,
-            token1_id=(await to_token).id,
-        )
+        p = Pair(token0_id=(await from_token).id, token1_id=(await to_token).id)
         session.add(p)
         await session.commit()
         pairs[token0_hash, token1_hash] = p
@@ -113,33 +112,56 @@ async def get_or_create_pair(substrate, session, pairs, token0_hash: str,
 
 async def get_all_pairs(session):
     pairs = {}
-    for p, in await session.execute(
-            select(Pair).options(selectinload(Pair.token0),
-                                 selectinload(Pair.token1))):
+    for (p,) in await session.execute(
+        select(Pair).options(selectinload(Pair.token0), selectinload(Pair.token1))
+    ):
         pairs[p.token0.hash, p.token1.hash] = p
     return pairs
 
 
+async def update_volumes(session):
+    last_24h = time() - 24 * 3600
+    await session.execute(
+        update(Token).values(
+            trade_volume=select(func.coalesce(func.sum(Swap.token0_amount), 0))
+            .join(Pair, Pair.token0_id == Token.id)
+            .where(Swap.timestamp > last_24h)
+            .scalar_subquery()
+            + select(func.coalesce(func.sum(Swap.token1_amount), 0))
+            .join(Pair, Pair.token1_id == Token.id)
+            .where(Swap.timestamp > last_24h)
+            .scalar_subquery()
+        )
+    )
+    await session.execute(
+        update(Pair).values(
+            token0_volume=select(func.sum(Swap.token0_amount))
+            .where(and_(Swap.pair_id == Pair.id, Swap.timestamp > last_24h))
+            .scalar_subquery(),
+            token1_volume=select(func.sum(Swap.token1_amount))
+            .where(and_(Swap.pair_id == Pair.id, Swap.timestamp > last_24h))
+            .scalar_subquery(),
+        )
+    )
+    await session.commit()
+
+
 async def async_main(begin=1, clean=False, silent=False):
-    engine = get_db_engine()
+    from db import async_session, engine
+
     # create tables if neccessary
     async with engine.begin() as conn:
         if clean:
             await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
-    # expire_on_commit=False will prevent attributes from being expired
-    # after commit.
-    async_session = sessionmaker(engine,
-                                 expire_on_commit=False,
-                                 class_=AsyncSession)
     # get the number of last block in the chain
     substrate = connect_to_substrate_node()
-    end = substrate.get_runtime_block(
-        substrate.get_chain_head())['block']['header']['number']
-    selected_events = {'swap'}
+    end = substrate.get_runtime_block(substrate.get_chain_head())["block"]["header"][
+        "number"
+    ]
+    selected_events = {"swap"}
     func_map = {
-        k: v
-        for k, v in get_processing_functions().items() if k in selected_events
+        k: v for k, v in get_processing_functions().items() if k in selected_events
     }
     async with async_session() as session:
         # cache list of pairs in memory
@@ -152,9 +174,10 @@ async def async_main(begin=1, clean=False, silent=False):
         # sync from last block in the DB to last block in the chain
         pending = None
         if not silent:
-            logging.info('Importing from %i to %i', begin, end)
+            logging.info("Importing from %i to %i", begin, end)
         for block in (range if silent or not sys.stdout.isatty() else trange)(
-                begin, end):
+            begin, end
+        ):
             # get events from <block> to <dataset>
             dataset = []
             res, events = get_events_from_block(substrate, block)
@@ -164,7 +187,7 @@ async def async_main(begin=1, clean=False, silent=False):
                 try:
                     await pending
                 except IntegrityError as e:
-                    logging.warning('Error during insert: %s', e)
+                    logging.warning("Error during insert: %s", e)
                     await session.rollback()
                     # rollback causes objects to expire
                     # need to reload them
@@ -173,70 +196,79 @@ async def async_main(begin=1, clean=False, silent=False):
             # prepare data to be INSERTed
             swaps = []
             for tx in dataset:
-                tx['pair_id'] = (await
-                                 get_or_create_pair(substrate, session, pairs,
-                                                    tx.pop('asset1_type'),
-                                                    tx.pop('asset2_type'))).id
-                if tx['asset2_amount']:
-                    tx['price'] = tx['asset1_amount'] / tx['asset2_amount']
-                tx['token0_amount'] = tx.pop('asset1_amount')
-                tx['token1_amount'] = tx.pop('asset2_amount')
-                swaps.append(Swap(block=block, **tx))
+                try:
+                    # skip transactions with invalid asset type 0x000....
+                    if not int(tx["asset1_type"], 16) or not int(tx["asset2_type"], 16):
+                        continue
+                    tx["pair_id"] = (
+                        await get_or_create_pair(
+                            substrate,
+                            session,
+                            pairs,
+                            tx.pop("asset1_type"),
+                            tx.pop("asset2_type"),
+                        )
+                    ).id
+                    if tx["asset2_amount"]:
+                        tx["price"] = tx["asset1_amount"] / tx["asset2_amount"]
+                    tx["token0_amount"] = tx.pop("asset1_amount")
+                    tx["token1_amount"] = tx.pop("asset2_amount")
+                    swaps.append(Swap(block=block, **tx))
+                except Exception as e:
+                    logging.error(
+                        "Failed to process transaction 0x%x, %s in block %i:",
+                        tx["id"],
+                        tx,
+                        block,
+                    )
+                    logging.error(e)
+                    raise
             if swaps:
                 # some transactions have duplicate IDs
                 # keep only the last one
                 # (delete previous with same IDs)
                 await session.execute(
-                    delete(Swap, Swap.id.in_([Decimal(s.id) for s in swaps])))
+                    delete(Swap, Swap.id.in_([Decimal(s.id) for s in swaps]))
+                )
                 session.add_all(swaps)
                 pending = session.commit()
         if pending:
             await pending
         # update trade_volume stats
-        last_24h = (await session.execute(select(func.max(Swap.timestamp))
-                                          )).scalar() - 24 * 3600
-        await session.execute(
-            update(Token).values(
-                trade_volume=select(func.sum(Swap.token0_amount)).join(
-                    Pair, Pair.token0_id == Token.id).where(
-                        Swap.timestamp > last_24h).scalar_subquery() +
-                select(func.sum(Swap.token1_amount)).join(
-                    Pair, Pair.token1_id == Token.id).where(
-                        Swap.timestamp > last_24h).scalar_subquery()))
-        await session.commit()
+        await update_volumes(session)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description='Import swap history from Substrate node into DB.')
+        description="Import swap history from Substrate node into DB."
+    )
     parser.add_argument(
-        '--clean',
-        '-c',
-        action='store_true',
-        help='clean (drop) and re-create database tables before import')
-    parser.add_argument('--silent',
-                        '-s',
-                        action='store_true',
-                        help='print no output except errors')
-    parser.add_argument('--begin',
-                        '-b',
-                        type=int,
-                        default=1,
-                        help='first block to index')
-    parser.add_argument('--follow',
-                        '-f',
-                        action='store_true',
-                        help='continiously poll for new blocks')
+        "--clean",
+        "-c",
+        action="store_true",
+        help="clean (drop) and re-create database tables before import",
+    )
+    parser.add_argument(
+        "--silent", "-s", action="store_true", help="print no output except errors"
+    )
+    parser.add_argument(
+        "--begin", "-b", type=int, default=1, help="first block to index"
+    )
+    parser.add_argument(
+        "--follow", "-f", action="store_true", help="continiously poll for new blocks"
+    )
     args = parser.parse_args()
-    logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s',
-                        level=logging.WARNING if args.silent else logging.INFO)
+    logging.basicConfig(
+        format="%(asctime)s %(levelname)s %(message)s",
+        level=logging.WARNING if args.silent else logging.INFO,
+    )
     if args.follow:
         # in follow mode import new blocks then sleep for 1 minute
         # then import again in a loop
         while True:
             asyncio.run(async_main(args.begin, args.clean, args.silent))
             if not args.silent:
-                logging.info('Waiting for new blocks...')
+                logging.info("Waiting for new blocks...")
             sleep(60)
     else:
         asyncio.run(async_main(args.begin, args.clean, args.silent))

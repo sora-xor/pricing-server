@@ -1,25 +1,23 @@
 import graphene
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from graphene import Enum, Int
 from graphene_sqlalchemy import SQLAlchemyObjectType
 from graphql.execution.executors.asyncio import AsyncioExecutor
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, desc, func
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import and_, desc
 from sqlalchemy.future import select
-from sqlalchemy.orm import scoped_session, selectinload, sessionmaker
+from sqlalchemy.orm import selectinload
 from starlette.graphql import GraphQLApp
 
-from models import Pair, Swap, Token, get_db_engine
+from models import Pair, Swap, Token
 
-engine = get_db_engine()
-async_session = sessionmaker(engine,
-                             expire_on_commit=False,
-                             class_=AsyncSession)
 
-db_session = scoped_session(
-    sessionmaker(autocommit=False, autoflush=False, bind=engine))
+async def get_db():
+    from db import async_session
+
+    async with async_session() as session:
+        yield session
 
 
 class TokenType(SQLAlchemyObjectType):
@@ -53,45 +51,42 @@ class SwapOrderBy(Enum):
 class Query(graphene.ObjectType):
     tokens = graphene.List(TokenType)
     pairs = graphene.List(PairType)
-    swaps = graphene.List(SwapType,
-                          first=Int(),
-                          skip=Int(),
-                          orderBy=SwapOrderBy(),
-                          orderDirection=OrderDirection())
+    swaps = graphene.List(
+        SwapType,
+        first=Int(),
+        skip=Int(),
+        orderBy=SwapOrderBy(),
+        orderDirection=OrderDirection(),
+    )
 
     async def resolve_tokens(self, info):
-        async with async_session() as session:
-            q = select(Token)
-            return [t for t, in await session.execute(q)]
+        q = select(Token)
+        return [t for t, in await info.context["request"].db.execute(q)]
 
     async def resolve_pairs(self, info):
-        async with async_session() as session:
-            q = select(Pair).options(
-                selectinload(Pair.token0),
-                selectinload(Pair.token1),
-            )
-            return [p for p, in await session.execute(q)]
+        q = select(Pair).options(selectinload(Pair.token0), selectinload(Pair.token1))
+        return [p for p, in await info.context["request"].db.execute(q)]
 
-    async def resolve_swaps(self,
-                            info,
-                            first=10,
-                            skip=None,
-                            offset=None,
-                            orderBy=None,
-                            orderDirection=None):
-        async with async_session() as session:
-            first = min(1000, first)  # limit max reply size
-            q = select(Swap).limit(first).options(
+    async def resolve_swaps(
+        self, info, first=10, skip=None, offset=None, orderBy=None, orderDirection=None
+    ):
+        first = min(1000, first)  # limit max reply size
+        q = (
+            select(Swap)
+            .limit(first)
+            .options(
                 selectinload(Swap.pair).selectinload(Pair.token0),
                 selectinload(Swap.pair).selectinload(Pair.token1),
             )
-            if orderBy:
-                orderBy = SwapOrderBy.get(orderBy).name
-                q = q.order_by(orderBy if orderDirection ==
-                               OrderDirection.asc else desc(orderBy))
-            if skip:
-                q = q.offset(skip)
-            return [s for s, in await session.execute(q)]
+        )
+        if orderBy:
+            orderBy = SwapOrderBy.get(orderBy).name
+            q = q.order_by(
+                orderBy if orderDirection == OrderDirection.asc else desc(orderBy)
+            )
+        if skip:
+            q = q.offset(skip)
+        return [s for s, in await info.context["request"].db.execute(q)]
 
 
 app = FastAPI()
@@ -113,75 +108,50 @@ async def root():
 
 
 @app.get("/pairs/")
-async def pairs():
-    async with async_session() as session:
-        # get last swap
-        last = (await
-                session.execute(select(func.max(Swap.timestamp)))).scalar()
-        if not last:
-            # no data imported yet
-            return {}
-        # 24 hours ago since last imported transaction timestamp
-        last_24h = last - 24 * 3600
-        # fetch all pairs info
-        pairs = {}
-        for p, in await session.execute(
-                select(Pair).options(selectinload(Pair.token0),
-                                     selectinload(Pair.token1))):
-            pairs[p.id] = p
-        # obtain last prices
-        prices = session.execute(
-            select(Swap.__table__.c.pair_id, Swap.__table__.c.price).distinct(
-                Swap.__table__.c.pair_id).order_by(
-                    Swap.__table__.c.pair_id,
-                    Swap.__table__.c.timestamp.desc()))
-        # get trade volumes over last 24 hours if exists
-        # (sum(amount) from swap table)
-        volumes = session.execute(
-            select(
-                Swap.__table__.c.pair_id,
-                func.sum(Swap.__table__.c.token0_amount),
-                func.sum(Swap.__table__.c.token1_amount),
-            ).where(Swap.__table__.c.timestamp > last_24h).group_by(
-                Swap.__table__.c.pair_id, ))
-        # build list of all token pairs
-        response = {
-            pair.token0.hash + "_" + pair.token1.hash: {
-                "base_id": pair.token1.hash,
-                "base_name": pair.token1.name,
-                "base_symbol": pair.token1.symbol,
-                "quote_id": pair.token0.hash,
-                "quote_name": pair.token0.name,
-                "quote_symbol": pair.token0.symbol,
-                "base_volume": 0,
-                "quote_volume": 0,
-            }
-            for pair in pairs.values()
+async def pairs(session=Depends(get_db)):
+    # 24 hours ago since last imported transaction timestamp
+    # fetch all pairs info
+    pairs = {}
+    for p, last_price in await session.execute(
+        select(
+            Pair,
+            select(Swap.price)
+            .order_by(Swap.timestamp.desc())
+            .limit(1)
+            .scalar_subquery(),
+        ).options(selectinload(Pair.token0), selectinload(Pair.token1))
+    ):
+        p.last_price = last_price
+        pairs[p.id] = p
+    # build list of all token pairs
+    response = {
+        pair.token0.hash
+        + "_"
+        + pair.token1.hash: {
+            "base_id": pair.token1.hash,
+            "base_name": pair.token1.name,
+            "base_symbol": pair.token1.symbol,
+            "quote_id": pair.token0.hash,
+            "quote_name": pair.token0.name,
+            "quote_symbol": pair.token0.symbol,
+            "last_price": pair.last_price,
+            "base_volume": pair.token1_volume,
+            "quote_volume": pair.token0_volume,
         }
-        # fill volumes
-        for pair_id, a1vol, a2vol in await volumes:
-            p = pairs[pair_id]
-            response[p.token0.hash + "_" + p.token1.hash].update({
-                "base_volume":
-                int(a2vol),
-                "quote_volume":
-                int(a1vol),
-            })
-        # fill prices
-        for pair_id, last_price in await prices:
-            p = pairs[pair_id]
-            response[p.token0.hash + "_" +
-                     p.token1.hash]['last_price'] = last_price
-        return response
+        for pair in pairs.values()
+    }
+    return response
 
 
 class PairResponse(BaseModel):
     base_id: str = Field(
-        "0x0200000000000000000000000000000000000000000000000000000000000000")
+        "0x0200000000000000000000000000000000000000000000000000000000000000"
+    )
     base_name: str = Field("SORA")
     base_symbol: str = Field("XOR")
     quote_id: str = Field(
-        "0x0200050000000000000000000000000000000000000000000000000000000000")
+        "0x0200050000000000000000000000000000000000000000000000000000000000"
+    )
     quote_name: str = Field("Polkaswap")
     quote_symbol: str = Field(example="PSWAP")
     last_price: float = Field(example=12.34)
@@ -190,63 +160,57 @@ class PairResponse(BaseModel):
 
 
 @app.get("/pairs/{base}-{quote}/", response_model=PairResponse)
-async def pair(base: str, quote: str):
-    async with async_session() as session:
-        # will need it later
-        last_24h = session.execute(select(func.max(Swap.timestamp)))
-        # get pair and its tokens info
-        token0 = Token.__table__.alias('token0')
-        token1 = Token.__table__.alias('token1')
-        pair = await session.execute(
-            select(Pair).options(selectinload(Pair.token0),
-                                 selectinload(Pair.token1)).join(
-                                     token0,
-                                     token0.c.id == Pair.token0_id).join(
-                                         token1,
-                                         token1.c.id == Pair.token1_id).where(
-                                             and_(token0.c.symbol == base,
-                                                  token1.c.symbol == quote)))
-        pair = pair.scalar()
-        if not pair:
-            raise HTTPException(status_code=404, detail="Pair not found")
-        # get 24h volume
-        last_24h = (await last_24h).scalar() - 24 * 3600
-        volume = session.execute(
-            select(
-                func.sum(Swap.token0_amount),
-                func.sum(Swap.token1_amount),
-            ).where(and_(
-                Swap.timestamp > last_24h,
-                Swap.pair_id == pair.id,
-            )))
-        # get last price
-        price = (await session.execute(
-            select(Swap.__table__.c.price).where(
-                Swap.pair_id == pair.id).order_by(
-                    Swap.timestamp.desc()).limit(1))).scalar()
-        for a1vol, a2vol in await volume:
-            break
-        return {
-            "base_id": pair.token1.hash,
-            "base_name": pair.token1.name,
-            "base_symbol": pair.token1.symbol,
-            "quote_id": pair.token0.hash,
-            "quote_name": pair.token0.name,
-            "quote_symbol": pair.token0.symbol,
-            "last_price": price,
-            "base_volume": int(a2vol or 0),
-            "quote_volume": int(a1vol or 0)
-        }
+async def pair(base: str, quote: str, session=Depends(get_db)):
+    # get pair and its tokens info
+    token0 = Token.__table__.alias("token0")
+    token1 = Token.__table__.alias("token1")
+    pair = await session.execute(
+        select(Pair)
+        .options(selectinload(Pair.token0), selectinload(Pair.token1))
+        .join(token0, token0.c.id == Pair.token0_id)
+        .join(token1, token1.c.id == Pair.token1_id)
+        .where(and_(token0.c.symbol == base, token1.c.symbol == quote))
+    )
+    pair = pair.scalar()
+    if not pair:
+        raise HTTPException(status_code=404, detail="Pair not found")
+    price = (
+        await session.execute(
+            select(Swap.__table__.c.price)
+            .where(Swap.pair_id == pair.id)
+            .order_by(Swap.timestamp.desc())
+            .limit(1)
+        )
+    ).scalar()
+    return {
+        "base_id": pair.token1.hash,
+        "base_name": pair.token1.name,
+        "base_symbol": pair.token1.symbol,
+        "quote_id": pair.token0.hash,
+        "quote_name": pair.token0.name,
+        "quote_symbol": pair.token0.symbol,
+        "last_price": price,
+        "base_volume": pair.token1_volume or 0,
+        "quote_volume": pair.token0_volume or 0,
+    }
+
+
+@app.get("/graph")
+async def graphql_get(request: Request):
+    return await GraphQLApp(
+        schema=graphene.Schema(query=Query), executor_class=AsyncioExecutor
+    ).handle_graphql(request)
+
+
+@app.post("/graph")
+async def graphql_post(request: Request, db=Depends(get_db)):
+    gapp = GraphQLApp(
+        schema=graphene.Schema(query=Query), executor_class=AsyncioExecutor
+    )
+    request.db = db
+    return await gapp.handle_graphql(request)
 
 
 @app.get("/healthcheck")
 async def healthcheck():
     return {"status": "OK"}
-
-
-app.add_route(
-    "/graph",
-    GraphQLApp(
-        schema=graphene.Schema(query=Query),
-        executor_class=AsyncioExecutor,
-    ))

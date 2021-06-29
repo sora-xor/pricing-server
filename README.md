@@ -37,6 +37,12 @@ http://localhost/pairs/{BASE}-{QUOTE}- Pricing data for specific pair. For examp
 
 http://localhost/healthcheck - Healthcheck endpoint. Returns 200 OK. Can be used to check if web server is running and accepting connections.
 
+## Running tests
+
+```bash
+python -munittest  # in project directory
+```
+
 ## System requirements
 
 8GB RAM
