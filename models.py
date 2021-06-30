@@ -21,7 +21,7 @@ class Token(Base):
     symbol = Column(String(8), nullable=False)
     name = Column(String(128), nullable=False)
     decimals = Column(Integer, nullable=False)
-    trade_volume = Column(Float)
+    trade_volume = Column(Numeric(34))
 
 
 class Pair(Base):
@@ -39,14 +39,14 @@ class Pair(Base):
         foreign_keys=[token1_id],
         backref=backref("pairs1", uselist=True, cascade="delete,all"),
     )
-    token0_volume = Column(Float)
-    token1_volume = Column(Float)
+    token0_volume = Column(Numeric(34))
+    token1_volume = Column(Numeric(34))
 
 
 class Swap(Base):
     __tablename__ = "swap"
 
-    id = Column(Numeric(20), primary_key=True)
+    id = Column(Numeric(80), primary_key=True)
     block = Column(Integer, nullable=False)
     timestamp = Column(BigInteger, index=True, nullable=False)
     xor_fee = Column(Numeric(20), nullable=False)
@@ -59,6 +59,10 @@ class Swap(Base):
     pair = relationship(
         Pair, backref=backref("swaps", uselist=True, cascade="delete,all")
     )
+
+    @property
+    def hash(self):
+        return "0x%x" % int(self.id)
 
 
 Index("idx_swap_pair_timestamp_desc", Swap.pair_id, Swap.timestamp.desc())

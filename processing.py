@@ -35,7 +35,7 @@ def get_fees_from_event(event) -> float:
 
 def get_op_id(ex_dict) -> int:
     s = ex_dict["extrinsic_hash"]
-    return int(s, 16) % 255 ** 8
+    return int(s, 16)
 
 
 def is_extrinsic_success(event) -> bool:
