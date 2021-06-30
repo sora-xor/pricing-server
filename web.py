@@ -1,7 +1,7 @@
 import graphene
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
-from graphene import Enum, Int
+from graphene import Enum, Int, String
 from graphene_sqlalchemy import SQLAlchemyObjectType
 from graphql.execution.executors.asyncio import AsyncioExecutor
 from pydantic import BaseModel, Field
@@ -35,6 +35,8 @@ class PairType(SQLAlchemyObjectType):
 
 
 class SwapType(SQLAlchemyObjectType):
+    hash = String()
+
     class Meta:
         model = Swap
 
