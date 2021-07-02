@@ -21,7 +21,7 @@ class Token(Base):
     symbol = Column(String(8), nullable=False)
     name = Column(String(128), nullable=False)
     decimals = Column(Integer, nullable=False)
-    trade_volume = Column(Numeric(34))
+    trade_volume = Column(Numeric())
 
 
 class Pair(Base):
@@ -39,8 +39,8 @@ class Pair(Base):
         foreign_keys=[token1_id],
         backref=backref("pairs1", uselist=True, cascade="delete,all"),
     )
-    token0_volume = Column(Numeric(34))
-    token1_volume = Column(Numeric(34))
+    token0_volume = Column(Numeric())
+    token1_volume = Column(Numeric())
 
 
 class Swap(Base):
