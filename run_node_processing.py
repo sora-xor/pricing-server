@@ -4,7 +4,7 @@ import logging
 import sys
 from dataclasses import asdict
 from decimal import Decimal
-from time import sleep, time
+from time import time
 from typing import Dict, List
 
 import decouple
@@ -16,7 +16,7 @@ from sqlalchemy.orm import selectinload
 from substrateinterface import SubstrateInterface
 from tqdm import trange
 
-from models import Base, Pair, Swap, Token
+from models import Pair, Swap, Token
 from processing import get_processing_functions, get_timestamp, should_be_processed
 
 
@@ -152,14 +152,7 @@ async def update_volumes(session):
     await session.commit()
 
 
-async def async_main(begin=1, clean=False, silent=False):
-    from db import async_session, engine
-
-    # create tables if neccessary
-    async with engine.begin() as conn:
-        if clean:
-            await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
+async def async_main(async_session, begin=1, clean=False, silent=False):
     # get the number of last block in the chain
     substrate = connect_to_substrate_node()
     end = substrate.get_runtime_block(substrate.get_chain_head())["block"]["header"][
@@ -245,7 +238,17 @@ async def async_main(begin=1, clean=False, silent=False):
         await update_volumes(session)
 
 
+async def async_main_loop(async_session, args):
+    while True:
+        await async_main(async_session, args.begin, args.clean, args.silent)
+        if not args.silent:
+            logging.info("Waiting for new blocks...")
+        await asyncio.sleep(60)
+
+
 if __name__ == "__main__":
+    from db import async_session
+
     parser = argparse.ArgumentParser(
         description="Import swap history from Substrate node into DB."
     )
@@ -272,10 +275,6 @@ if __name__ == "__main__":
     if args.follow:
         # in follow mode import new blocks then sleep for 1 minute
         # then import again in a loop
-        while True:
-            asyncio.run(async_main(args.begin, args.clean, args.silent))
-            if not args.silent:
-                logging.info("Waiting for new blocks...")
-            sleep(60)
+        asyncio.run(async_main_loop(async_session, args))
     else:
-        asyncio.run(async_main(args.begin, args.clean, args.silent))
+        asyncio.run(async_main(async_session, args.begin, args.clean, args.silent))
