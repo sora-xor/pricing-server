@@ -120,17 +120,23 @@ async def get_all_pairs(session):
 
 
 async def update_volumes(session):
-    last_24h = time() - 24 * 3600
+    last_24h = (time() - 24 * 3600) * 1000
     await session.execute(
         update(Token).values(
-            trade_volume=select(func.coalesce(func.sum(Swap.token0_amount), 0))
-            .join(Pair, Pair.token0_id == Token.id)
-            .where(Swap.timestamp > last_24h)
-            .scalar_subquery()
-            + select(func.coalesce(func.sum(Swap.token1_amount), 0))
-            .join(Pair, Pair.token1_id == Token.id)
-            .where(Swap.timestamp > last_24h)
-            .scalar_subquery()
+            trade_volume=func.coalesce(
+                select(func.sum(Swap.token0_amount))
+                .join(Pair, Pair.token0_id == Token.id)
+                .where(Swap.timestamp > last_24h)
+                .scalar_subquery(),
+                0,
+            )
+            + func.coalesce(
+                select(func.sum(Swap.token1_amount))
+                .join(Pair, Pair.token1_id == Token.id)
+                .where(Swap.timestamp > last_24h)
+                .scalar_subquery(),
+                0,
+            )
         )
     )
     await session.execute(
@@ -234,7 +240,8 @@ async def async_main(begin=1, clean=False, silent=False):
                 pending = session.commit()
         if pending:
             await pending
-        # update trade_volume stats
+        if not silent:
+            logging.info("Updating trade volumes...")
         await update_volumes(session)
 
 

@@ -32,12 +32,27 @@ app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
 
 
-class ImportTest(unittest.TestCase):
+class DBTestCase(unittest.TestCase):
+    async def asyncSetUp(self):
+        # create tables
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+    async def asyncTearDown(self):
+        # drop tables
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+
+    def setUp(self):
+        asyncio.run(self.asyncSetUp())
+
+    def tearDown(self):
+        asyncio.run(self.asyncTearDown())
+
+
+class ImportTest(DBTestCase):
     def test_update_volumes(self):
         async def inner():
-            # create tables
-            async with engine.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
             # insert test data
             async with TestingSessionLocal() as session:
                 dai = Token(hash="0x1", name="D", decimals=18, symbol="DAI")
@@ -49,7 +64,7 @@ class ImportTest(unittest.TestCase):
                 swap = Swap(
                     id=1,
                     block=2,
-                    timestamp=time(),
+                    timestamp=time() * 1000,
                     pair=pair,
                     xor_fee=4,
                     price=2,
@@ -61,7 +76,7 @@ class ImportTest(unittest.TestCase):
                 swap = Swap(
                     id=2,
                     block=4,
-                    timestamp=time(),
+                    timestamp=time() * 1000,
                     pair=pair,
                     xor_fee=4,
                     price=3,
@@ -82,17 +97,13 @@ class ImportTest(unittest.TestCase):
                 ).scalars()
                 self.assertEqual(dai.trade_volume, 2.0)
                 self.assertEqual(xor.trade_volume, 5.0)
-                # drop tables
-                await conn.run_sync(Base.metadata.drop_all)
 
-            asyncio.run(inner())
+        asyncio.run(inner())
 
 
-class WebAppTest(unittest.TestCase):
+class WebAppTest(DBTestCase):
     async def asyncSetUp(self):
-        # create tables
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+        await super().asyncSetUp()
         # insert test data
         async with TestingSessionLocal() as session:
             dai = Token(hash="0x1", name="D", decimals=18, symbol="DAI")
@@ -126,17 +137,6 @@ class WebAppTest(unittest.TestCase):
             )
             session.add(swap)
             await session.commit()
-
-    async def asyncTearDown(self):
-        # drop tables
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.drop_all)
-
-    def setUp(self):
-        asyncio.run(self.asyncSetUp())
-
-    def tearDown(self):
-        asyncio.run(self.asyncTearDown())
 
     def test_pairs_get(self):
         response = client.get("/pairs/")
