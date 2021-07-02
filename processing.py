@@ -59,6 +59,8 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
     for event in extrinsicEvents:
         if event["event_id"] == "SwapSuccess":
             swap_success = True
+        elif event["event_id"] == "ExtrinsicFailed":
+            swap_success = False
         elif event["event_id"] == "Exchange":
             input_amount = event["params"][4]["value"]
             output_amount = event["params"][5]["value"]
