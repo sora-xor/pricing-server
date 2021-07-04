@@ -212,6 +212,7 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                         tx["price"] = tx["asset1_amount"] / tx["asset2_amount"]
                     tx["token0_amount"] = tx.pop("asset1_amount")
                     tx["token1_amount"] = tx.pop("asset2_amount")
+                    tx["filter_mode"] = tx["filter_mode"][0]
                     swaps.append(Swap(block=block, **tx))
                 except Exception as e:
                     logging.error(

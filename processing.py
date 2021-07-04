@@ -85,14 +85,7 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
                     "desired_amount_out"
                 ]
         elif param["name"] == "selected_source_types":
-            filter_mode = (
-                "SMART"
-                if len(param["value"]) < 1
-                else param["value"][0]
-                if len(param["value"]) == 1
-                else param["value"]
-            )
-            # TODO: handle filterMode here
+            filter_mode = param["value"] or ["SMART"]
 
     return Swap(
         get_op_id(ex_dict),
