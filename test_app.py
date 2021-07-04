@@ -1,6 +1,7 @@
 import asyncio
 import unittest
 from time import time
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -159,7 +160,9 @@ class WebAppTest(DBTestCase):
             },
         )
 
-    def test_pair_get(self):
+    @patch("web.get_whitelist")
+    def test_pair_get(self, whitelist_mock):
+        whitelist_mock.return_value = [{"address": "0x1"}, {"address": "0x2"}]
         response = client.get("/pairs/DAI-XOR")
         assert response.status_code == 200, response.text
         data = response.json()

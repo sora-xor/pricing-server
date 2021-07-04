@@ -1,4 +1,7 @@
+from time import time
+
 import graphene
+import requests
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from graphene import Enum, Int, String
@@ -11,6 +14,17 @@ from sqlalchemy.orm import selectinload
 from starlette.graphql import GraphQLApp
 
 from models import Pair, Swap, Token
+
+WHITELIST_URL = "https://raw.githubusercontent.com/sora-xor/polkaswap-token-whitelist-config/master/whitelist.json"  # noqa
+
+__cache = {}
+
+
+def get_whitelist():
+    KEY = "whitelist"
+    if KEY not in __cache or __cache[KEY]["updated"] < time() - 24 * 3600:
+        __cache[KEY] = {"data": requests.get(WHITELIST_URL).json(), "updated": time()}
+    return __cache["whitelist"]["data"]
 
 
 async def get_db():
@@ -166,12 +180,20 @@ async def pair(base: str, quote: str, session=Depends(get_db)):
     # get pair and its tokens info
     token0 = Token.__table__.alias("token0")
     token1 = Token.__table__.alias("token1")
+    whitelist = [token["address"] for token in get_whitelist()]
     pair = await session.execute(
         select(Pair)
         .options(selectinload(Pair.token0), selectinload(Pair.token1))
         .join(token0, token0.c.id == Pair.token0_id)
         .join(token1, token1.c.id == Pair.token1_id)
-        .where(and_(token0.c.symbol == base, token1.c.symbol == quote))
+        .where(
+            and_(
+                token0.c.hash.in_(whitelist),
+                token1.c.hash.in_(whitelist),
+                token0.c.symbol == base,
+                token1.c.symbol == quote,
+            )
+        )
     )
     pair = pair.scalar()
     if not pair:
