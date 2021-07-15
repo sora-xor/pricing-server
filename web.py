@@ -132,6 +132,7 @@ async def pairs(session=Depends(get_db)):
         select(
             Pair,
             select(Swap.price)
+            .where(Swap.pair_id == Pair.id)
             .order_by(Swap.timestamp.desc())
             .limit(1)
             .scalar_subquery(),
