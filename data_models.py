@@ -124,16 +124,17 @@ class SoraOp:
 
 @dataclass
 class LiquidityTx(SoraOp):
-    asset1_type: str
-    asset2_type: str
-    asset1_amount: float
-    asset2_amount: float
+    input_asset_id: str
+    output_asset_id: str
+    in_amount: int
+    out_amount: int
 
 
 @dataclass
 class Swap(LiquidityTx):
     filter_mode: str
-    swap_fee_amount: float
+    swap_fee_amount: int
+    xor_amount: int
 
 
 @dataclass

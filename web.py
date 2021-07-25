@@ -1,3 +1,4 @@
+from decimal import Decimal
 from time import time
 
 import graphene
@@ -13,7 +14,8 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from starlette.graphql import GraphQLApp
 
-from models import Pair, Swap, Token
+from models import Burn, BuyBack, Pair, Swap, Token
+from processing import XOR_ID
 
 WHITELIST_URL = "https://raw.githubusercontent.com/sora-xor/polkaswap-token-whitelist-config/master/whitelist.json"  # noqa
 
@@ -55,13 +57,38 @@ class SwapType(SQLAlchemyObjectType):
         model = Swap
 
 
+class BurnType(SQLAlchemyObjectType):
+    class Meta:
+        model = Burn
+
+
+class BuyBackType(SQLAlchemyObjectType):
+    class Meta:
+        model = BuyBack
+
+
 class OrderDirection(Enum):
     asc = 1
     desc = 2
 
 
-class SwapOrderBy(Enum):
+class OrderBy(Enum):
     timestamp = 1
+
+
+async def resolve_paginated(
+    q, info, first=10, skip=None, offset=None, orderBy=None, orderDirection=None
+):
+    first = min(1000, first)  # limit max reply size
+    q = q.limit(first)
+    if orderBy:
+        orderBy = OrderBy.get(orderBy).name
+        q = q.order_by(
+            orderBy if orderDirection == OrderDirection.asc else desc(orderBy)
+        )
+    if skip:
+        q = q.offset(skip)
+    return [s for s, in await info.context["request"].db.execute(q)]
 
 
 class Query(graphene.ObjectType):
@@ -71,7 +98,21 @@ class Query(graphene.ObjectType):
         SwapType,
         first=Int(),
         skip=Int(),
-        orderBy=SwapOrderBy(),
+        orderBy=OrderBy(),
+        orderDirection=OrderDirection(),
+    )
+    burns = graphene.List(
+        BurnType,
+        first=Int(),
+        skip=Int(),
+        orderBy=OrderBy(),
+        orderDirection=OrderDirection(),
+    )
+    buy_backs = graphene.List(
+        BuyBackType,
+        first=Int(),
+        skip=Int(),
+        orderBy=OrderBy(),
         orderDirection=OrderDirection(),
     )
 
@@ -80,29 +121,25 @@ class Query(graphene.ObjectType):
         return [t for t, in await info.context["request"].db.execute(q)]
 
     async def resolve_pairs(self, info):
-        q = select(Pair).options(selectinload(Pair.token0), selectinload(Pair.token1))
+        q = select(Pair).options(
+            selectinload(Pair.from_token), selectinload(Pair.to_token)
+        )
         return [p for p, in await info.context["request"].db.execute(q)]
 
-    async def resolve_swaps(
-        self, info, first=10, skip=None, offset=None, orderBy=None, orderDirection=None
-    ):
-        first = min(1000, first)  # limit max reply size
-        q = (
-            select(Swap)
-            .limit(first)
-            .options(
-                selectinload(Swap.pair).selectinload(Pair.token0),
-                selectinload(Swap.pair).selectinload(Pair.token1),
-            )
+    async def resolve_swaps(self, info, **kwargs):
+        q = select(Swap).options(
+            selectinload(Swap.pair).selectinload(Pair.from_token),
+            selectinload(Swap.pair).selectinload(Pair.to_token),
         )
-        if orderBy:
-            orderBy = SwapOrderBy.get(orderBy).name
-            q = q.order_by(
-                orderBy if orderDirection == OrderDirection.asc else desc(orderBy)
-            )
-        if skip:
-            q = q.offset(skip)
-        return [s for s, in await info.context["request"].db.execute(q)]
+        return resolve_paginated(q, info, **kwargs)
+
+    async def resolve_burns(self, info, **kwargs):
+        q = select(Burn).options(selectinload(Burn.token))
+        return resolve_paginated(q, info, **kwargs)
+
+    async def resolve_buy_backs(self, info, **kwargs):
+        q = select(BuyBack).options(selectinload(BuyBack.token))
+        return resolve_paginated(q, info, **kwargs)
 
 
 app = FastAPI()
@@ -116,7 +153,7 @@ async def root():
         <h1>SORA Pricing Server</h1>
         <ul>
         <li><a href="/pairs/">Pair Summary</a></li>
-        <li><a href="/pairs/XOR-PSWAP">Specific Pair Info</a></li>
+        <li><a href="/pairs/VAL-XOR/">Specific Pair Info</a></li>
         <li><a href="/graph">GraphQL API</a></li>
         <li><a href="/docs">Docs</a></li>
         </ul>
@@ -125,39 +162,52 @@ async def root():
 
 @app.get("/pairs/")
 async def pairs(session=Depends(get_db)):
-    # 24 hours ago since last imported transaction timestamp
     # fetch all pairs info
     pairs = {}
+    xor_id_int = int(XOR_ID, 16)
     for p, last_price in await session.execute(
         select(
             Pair,
-            select(Swap.price)
+            select(Swap.to_amount / Swap.from_amount)
             .where(Swap.pair_id == Pair.id)
             .order_by(Swap.timestamp.desc())
             .limit(1)
             .scalar_subquery(),
-        ).options(selectinload(Pair.token0), selectinload(Pair.token1))
+        ).options(selectinload(Pair.from_token), selectinload(Pair.to_token))
     ):
-        p.last_price = last_price
-        pairs[p.id] = p
-    # build list of all token pairs
-    response = {
-        pair.token0.hash
-        + "_"
-        + pair.token1.hash: {
-            "base_id": pair.token1.hash,
-            "base_name": pair.token1.name,
-            "base_symbol": pair.token1.symbol,
-            "quote_id": pair.token0.hash,
-            "quote_name": pair.token0.name,
-            "quote_symbol": pair.token0.symbol,
-            "last_price": pair.last_price,
-            "base_volume": pair.token1_volume,
-            "quote_volume": pair.token0_volume,
-        }
-        for pair in pairs.values()
-    }
-    return response
+        if p.from_token_id == xor_id_int:
+            base = p.to_token
+            base_volume = p.to_volume
+            quote = p.from_token
+            quote_volume = p.from_volume
+            if last_price:
+                last_price = 1 / last_price
+        else:
+            # should be no non-XOR pairs
+            assert p.to_token_id == xor_id_int
+            base = p.from_token
+            base_volume = p.from_volume
+            quote = p.to_token
+            quote_volume = p.to_volume
+        id = base.hash + "_" + quote.hash
+        if id in pairs:
+            if base_volume:
+                pairs[id]["base_volume"] += base_volume
+            if quote_volume:
+                pairs[id]["quote_volume"] += quote_volume
+        else:
+            pairs[id] = {
+                "base_id": base.hash,
+                "base_name": base.name,
+                "base_symbol": base.symbol,
+                "quote_id": quote.hash,
+                "quote_name": quote.name,
+                "quote_symbol": quote.symbol,
+                "last_price": last_price,
+                "base_volume": base_volume,
+                "quote_volume": quote_volume,
+            }
+    return pairs
 
 
 class PairResponse(BaseModel):
@@ -179,44 +229,48 @@ class PairResponse(BaseModel):
 @app.get("/pairs/{base}-{quote}/", response_model=PairResponse)
 async def pair(base: str, quote: str, session=Depends(get_db)):
     # get pair and its tokens info
-    token0 = Token.__table__.alias("token0")
-    token1 = Token.__table__.alias("token1")
-    whitelist = [token["address"] for token in get_whitelist()]
+    from_token = Token.__table__.alias("from_token")
+    to_token = Token.__table__.alias("to_token")
+    whitelist = [Decimal(int(token["address"], 16)) for token in get_whitelist()]
     pair = await session.execute(
         select(Pair)
-        .options(selectinload(Pair.token0), selectinload(Pair.token1))
-        .join(token0, token0.c.id == Pair.token0_id)
-        .join(token1, token1.c.id == Pair.token1_id)
+        .options(selectinload(Pair.from_token), selectinload(Pair.to_token))
+        .join(from_token, from_token.c.id == Pair.from_token_id)
+        .join(to_token, to_token.c.id == Pair.to_token_id)
         .where(
             and_(
-                token0.c.hash.in_(whitelist),
-                token1.c.hash.in_(whitelist),
-                token0.c.symbol == base,
-                token1.c.symbol == quote,
+                from_token.c.id.in_(whitelist),
+                to_token.c.id.in_(whitelist),
+                from_token.c.symbol == base,
+                to_token.c.symbol == quote,
             )
         )
     )
     pair = pair.scalar()
     if not pair:
         raise HTTPException(status_code=404, detail="Pair not found")
+    base = pair.from_token
+    quote = pair.to_token
+    if quote.id != int(XOR_ID, 16):
+        raise HTTPException(status_code=404, detail="Pair not found")
     price = (
         await session.execute(
-            select(Swap.__table__.c.price)
+            select(Swap.to_amount / Swap.from_amount)
             .where(Swap.pair_id == pair.id)
             .order_by(Swap.timestamp.desc())
             .limit(1)
         )
     ).scalar()
     return {
-        "base_id": pair.token1.hash,
-        "base_name": pair.token1.name,
-        "base_symbol": pair.token1.symbol,
-        "quote_id": pair.token0.hash,
-        "quote_name": pair.token0.name,
-        "quote_symbol": pair.token0.symbol,
+        "base_id": base.hash,
+        "base_name": base.name,
+        "base_symbol": base.symbol,
+        "quote_id": quote.hash,
+        "quote_name": quote.name,
+        "quote_symbol": quote.symbol,
         "last_price": price,
-        "base_volume": pair.token1_volume or 0,
-        "quote_volume": pair.token0_volume or 0,
+        "base_volume": pair.from_volume or 0,
+        "quote_volume": pair.to_volume or 0,
     }
 
 

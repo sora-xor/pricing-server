@@ -13,6 +13,13 @@ from data_models import (
     Withdraw,
 )
 
+XOR_ID = "0x0200000000000000000000000000000000000000000000000000000000000000"
+VAL_ID = "0x0200040000000000000000000000000000000000000000000000000000000000"
+PSWAP_ID = "0x0200050000000000000000000000000000000000000000000000000000000000"
+XOR_ACCOUNT = (
+    "0x54734f90f971a02c609b2d684e61b5574e35ac9942579a2635aada58e5d836a7"
+)  # noqa
+
 
 def event_params(exdict):
     # Account id
@@ -55,12 +62,21 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
     xor_fee = 0
 
     filter_mode = None
+    xor_amount = None
 
     for event in extrinsicEvents:
         if event["event_id"] == "SwapSuccess":
             swap_success = True
         elif event["event_id"] == "ExtrinsicFailed":
             swap_success = False
+        elif event["event_id"] == "Transfer":
+            src, dest, amount = event["params"]
+            if dest["value"] == XOR_ACCOUNT:
+                xor_amount = amount["value"]
+        elif event["event_id"] == "Endowed":
+            dest, amount = event["params"]
+            if dest["value"] == XOR_ACCOUNT:
+                xor_amount = amount["value"]
         elif event["event_id"] == "Exchange":
             input_amount = event["params"][4]["value"]
             output_amount = event["params"][5]["value"]
@@ -87,6 +103,8 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
         elif param["name"] == "selected_source_types":
             filter_mode = param["value"] or ["SMART"]
 
+    if input_asset_type != XOR_ID and output_asset_type != XOR_ID:
+        assert xor_amount is not None, ex_dict
     return Swap(
         get_op_id(ex_dict),
         timestamp,
@@ -97,6 +115,7 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
         output_amount,
         filter_mode,
         swap_fee_amount,
+        xor_amount,
     )
 
 

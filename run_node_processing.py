@@ -9,15 +9,21 @@ from typing import Dict, List
 
 import decouple
 from scalecodec.type_registry import load_type_registry_file
-from sqlalchemy import and_, delete, func, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import and_, func, update
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from substrateinterface import SubstrateInterface
 from tqdm import trange
 
-from models import Pair, Swap, Token
-from processing import get_processing_functions, get_timestamp, should_be_processed
+from models import Burn, BuyBack, Pair, Swap, Token
+from processing import (
+    PSWAP_ID,
+    VAL_ID,
+    XOR_ID,
+    get_processing_functions,
+    get_timestamp,
+    should_be_processed,
+)
 
 
 def connect_to_substrate_node():
@@ -54,7 +60,7 @@ def get_events_from_block(substrate, block_id: int):
             grouped_events[idx].append(eventdict)
         else:
             grouped_events[idx] = [eventdict]
-    return result, grouped_events
+    return events, result, grouped_events
 
 
 def process_events(dataset, new_map, result, grouped_events):
@@ -77,18 +83,15 @@ def process_events(dataset, new_map, result, grouped_events):
                     dataset.append(asdict(tx))
 
 
-async def get_or_create_token(substrate, session, hash: str):
-    q = session.execute(select(Token).where(Token.hash == hash))
+async def get_or_create_token(substrate, session, id: int) -> Token:
+    q = session.execute(select(Token).where(Token.id == Decimal(id)))
     for (token,) in await q:
         return token
     assets = substrate.rpc_request("assets_listAssetInfos", [])["result"]
     for a in assets:
-        if a["asset_id"] == hash:
+        if int(a["asset_id"], 16) == id:
             a = Token(
-                hash=hash,
-                name=a["name"],
-                symbol=a["symbol"],
-                decimals=int(a["precision"]),
+                id=id, name=a["name"], symbol=a["symbol"], decimals=int(a["precision"])
             )
             session.add(a)
             await session.commit()
@@ -98,42 +101,55 @@ async def get_or_create_token(substrate, session, hash: str):
 
 
 async def get_or_create_pair(
-    substrate, session, pairs, token0_hash: str, token1_hash: str
+    substrate, session, pairs, from_token_id: str, to_token_id: str
 ):
-    if (token0_hash, token1_hash) not in pairs:
-        from_token = get_or_create_token(substrate, session, token0_hash)
-        to_token = get_or_create_token(substrate, session, token1_hash)
-        p = Pair(token0_id=(await from_token).id, token1_id=(await to_token).id)
+    if (from_token_id, to_token_id) not in pairs:
+        from_token = get_or_create_token(substrate, session, from_token_id)
+        to_token = get_or_create_token(substrate, session, to_token_id)
+        p = Pair(from_token_id=(await from_token).id, to_token_id=(await to_token).id)
         session.add(p)
         await session.commit()
-        pairs[token0_hash, token1_hash] = p
-    return pairs[token0_hash, token1_hash]
+        pairs[from_token_id, to_token_id] = p
+    return pairs[from_token_id, to_token_id]
 
 
 async def get_all_pairs(session):
     pairs = {}
     for (p,) in await session.execute(
-        select(Pair).options(selectinload(Pair.token0), selectinload(Pair.token1))
+        select(Pair).options(selectinload(Pair.from_token), selectinload(Pair.to_token))
     ):
-        pairs[p.token0.hash, p.token1.hash] = p
+        pairs[p.from_token.id, p.to_token.id] = p
     return pairs
 
 
 async def update_volumes(session):
     last_24h = (time() - 24 * 3600) * 1000
+    div = Decimal(10 ** 18)
     await session.execute(
         update(Token).values(
             trade_volume=func.coalesce(
-                select(func.sum(Swap.token0_amount))
-                .join(Pair, Pair.token0_id == Token.id)
+                select(func.sum(Swap.from_amount) / div)
+                .join(Pair, Pair.from_token_id == Token.id)
                 .where(Swap.timestamp > last_24h)
                 .scalar_subquery(),
                 0,
             )
             + func.coalesce(
-                select(func.sum(Swap.token1_amount))
-                .join(Pair, Pair.token1_id == Token.id)
+                select(func.sum(Swap.to_amount) / div)
+                .join(Pair, Pair.to_token_id == Token.id)
                 .where(Swap.timestamp > last_24h)
+                .scalar_subquery(),
+                0,
+            )
+            + func.coalesce(
+                select(func.sum(Burn.amount) / div)
+                .where(and_(Burn.timestamp > last_24h, Burn.token_id == Token.id))
+                .scalar_subquery(),
+                0,
+            )
+            + func.coalesce(
+                select(func.sum(BuyBack.amount) / div)
+                .where(and_(BuyBack.timestamp > last_24h, BuyBack.token_id == Token.id))
                 .scalar_subquery(),
                 0,
             )
@@ -141,15 +157,23 @@ async def update_volumes(session):
     )
     await session.execute(
         update(Pair).values(
-            token0_volume=select(func.sum(Swap.token0_amount))
+            from_volume=select(func.sum(Swap.from_amount / div))
+            .join(Pair, Swap.pair_id == Pair.id)
+            .join(Token, Pair.from_token_id == Token.id)
             .where(and_(Swap.pair_id == Pair.id, Swap.timestamp > last_24h))
             .scalar_subquery(),
-            token1_volume=select(func.sum(Swap.token1_amount))
+            to_volume=select(func.sum(Swap.to_amount / div))
+            .join(Pair, Swap.pair_id == Pair.id)
+            .join(Token, Pair.to_token_id == Token.id)
             .where(and_(Swap.pair_id == Pair.id, Swap.timestamp > last_24h))
             .scalar_subquery(),
         )
     )
     await session.commit()
+
+
+def get_event_param(event, param_idx):
+    return event.value["params"][param_idx]["value"]
 
 
 async def async_main(async_session, begin=1, clean=False, silent=False):
@@ -174,63 +198,195 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
         pending = None
         if not silent:
             logging.info("Importing from %i to %i", begin, end)
+        xor_id_int = int(XOR_ID, 16)
+        val_id_int = int(VAL_ID, 16)
+        pswap_id_int = int(PSWAP_ID, 16)
+        await get_or_create_token(substrate, session, xor_id_int)
+        await get_or_create_token(substrate, session, val_id_int)
+        await get_or_create_token(substrate, session, pswap_id_int)
         for block in (range if silent or not sys.stdout.isatty() else trange)(
             begin, end
         ):
             # get events from <block> to <dataset>
             dataset = []
-            res, events = get_events_from_block(substrate, block)
-            process_events(dataset, func_map, res, events)
+            events, res, grouped_events = get_events_from_block(substrate, block)
+            timestamp = get_timestamp(res)
+            process_events(dataset, func_map, res, grouped_events)
             # await previous INSERT to finish if any
             if pending:
-                try:
-                    await pending
-                except IntegrityError as e:
-                    logging.warning("Error during insert: %s", e)
-                    await session.rollback()
-                    # rollback causes objects to expire
-                    # need to reload them
-                    pairs = await get_all_pairs(session)
+                await pending
                 pending = None
             # prepare data to be INSERTed
             swaps = []
             for tx in dataset:
                 try:
-                    # skip transactions with invalid asset type 0x000....
-                    if not int(tx["asset1_type"], 16) or not int(tx["asset2_type"], 16):
+                    # skip transactions with invalid asset type 0x000....0
+                    from_asset = int(tx.pop("input_asset_id"), 16)
+                    to_asset = int(tx.pop("output_asset_id"), 16)
+                    if not from_asset or not to_asset:
                         continue
-                    tx["pair_id"] = (
-                        await get_or_create_pair(
-                            substrate,
-                            session,
-                            pairs,
-                            tx.pop("asset1_type"),
-                            tx.pop("asset2_type"),
-                        )
-                    ).id
-                    if tx["asset2_amount"]:
-                        tx["price"] = tx["asset1_amount"] / tx["asset2_amount"]
-                    tx["token0_amount"] = tx.pop("asset1_amount")
-                    tx["token1_amount"] = tx.pop("asset2_amount")
+                    if from_asset == xor_id_int or to_asset == xor_id_int:
+                        data = [
+                            (
+                                from_asset,
+                                tx.pop("in_amount"),
+                                to_asset,
+                                tx.pop("out_amount"),
+                            )
+                        ]
+                    else:
+                        data = [
+                            (
+                                from_asset,
+                                tx.pop("in_amount"),
+                                xor_id_int,
+                                tx["xor_amount"],
+                            ),
+                            (
+                                xor_id_int,
+                                tx["xor_amount"],
+                                to_asset,
+                                tx.pop("out_amount"),
+                            ),
+                        ]
+                    del tx["xor_amount"]
                     tx["filter_mode"] = tx["filter_mode"][0]
-                    swaps.append(Swap(block=block, **tx))
+                    tx["txid"] = tx.pop("id")
+                    for from_asset, from_amount, to_asset, to_amount in data:
+                        tx["pair_id"] = (
+                            await get_or_create_pair(
+                                substrate, session, pairs, from_asset, to_asset
+                            )
+                        ).id
+                        swaps.append(
+                            Swap(
+                                block=block,
+                                from_amount=from_amount,
+                                to_amount=to_amount,
+                                **tx
+                            )
+                        )
                 except Exception as e:
                     logging.error(
-                        "Failed to process transaction 0x%x, %s in block %i:",
-                        tx["id"],
-                        tx,
-                        block,
+                        "Failed to process transaction %s in block %i:", tx, block
                     )
                     logging.error(e)
                     raise
-            if swaps:
-                # some transactions have duplicate IDs
-                # keep only the last one
-                # (delete previous with same IDs)
-                await session.execute(
-                    delete(Swap, Swap.id.in_([Decimal(s.id) for s in swaps]))
-                )
-                session.add_all(swaps)
+            # collect burns/buybacks
+            burns = []
+            buybacks = []
+            for idx, e in enumerate(events):
+                module = e.value["module_id"]
+                event = e.value["event_id"]
+                if module == "PswapDistribution" and event == "FeesExchanged":
+                    if (
+                        len(events) > idx + 4
+                        and events[idx + 4].value["event_id"] == "IncentiveDistributed"
+                    ):
+                        # buy back
+                        pswap_received = get_event_param(e, 5)
+                        # burn all and remint
+                        pswap_reminted_lp = get_event_param(
+                            events[idx + 2], 2
+                        )  # Currencies.Deposit
+                        pswap_reminted_parliament = get_event_param(
+                            events[idx + 3], 2
+                        )  # Currencies.Deposit
+                        pswap_burned = (
+                            pswap_received
+                            - pswap_reminted_parliament
+                            - pswap_reminted_lp
+                        )
+                        burns.append(
+                            Burn(
+                                block=block,
+                                timestamp=timestamp,
+                                token_id=pswap_id_int,
+                                amount=pswap_burned,
+                            )
+                        )
+                        buybacks.append(
+                            BuyBack(
+                                block=block,
+                                timestamp=timestamp,
+                                token_id=pswap_id_int,
+                                amount=pswap_reminted_lp + pswap_reminted_parliament,
+                            )
+                        )
+                elif module == "XorFee" and event == "FeeWithdrawn":
+                    extrinsic_id = e.value["extrinsic_idx"]
+                    xor_total_fee = get_event_param(e, 1)
+                    # there are free tx's, thus handled via check
+                    if xor_total_fee != 0:
+                        # no events with this info, only estimation
+                        xor_burned_estimated = int(xor_total_fee * 0.4)
+                        burns.append(
+                            Burn(
+                                block=block,
+                                timestamp=timestamp,
+                                token_id=xor_id_int,
+                                amount=xor_burned_estimated,
+                            )
+                        )
+                        # 50% xor is exchanged to val
+                        xor_dedicated_for_buy_back = get_event_param(events[idx + 2], 2)
+                        buybacks.append(
+                            BuyBack(
+                                block=block,
+                                timestamp=timestamp,
+                                token_id=xor_id_int,
+                                amount=xor_dedicated_for_buy_back,
+                            )
+                        )
+                        if len(events) > idx + 9:
+                            # exchanged val burned
+                            event_with_val_burned = events[idx + 9]
+                            # 10% burned val is reminted to parliament
+                            event_with_val_reminted_parliament = events[idx + 10]
+                            if (
+                                event_with_val_burned.value["extrinsic_idx"]
+                                == extrinsic_id
+                                and event_with_val_reminted_parliament.value[
+                                    "extrinsic_idx"
+                                ]
+                                == extrinsic_id
+                            ):
+                                if (
+                                    event_with_val_burned.value["event_id"]
+                                    == "Withdrawn"
+                                    and event_with_val_reminted_parliament.value[
+                                        "event_id"
+                                    ]
+                                    == "Deposited"
+                                ):
+                                    val_burned = get_event_param(
+                                        event_with_val_burned, 2
+                                    )
+                                    burns.append(
+                                        Burn(
+                                            block=block,
+                                            timestamp=timestamp,
+                                            token_id=val_id_int,
+                                            amount=val_burned,
+                                        )
+                                    )
+                                    val_reminted_parliament = get_event_param(
+                                        event_with_val_reminted_parliament, 2
+                                    )
+                                    buybacks.append(
+                                        BuyBack(
+                                            block=block,
+                                            timestamp=timestamp,
+                                            token_id=val_id_int,
+                                            amount=val_reminted_parliament,
+                                        )
+                                    )
+            if swaps or burns:
+                if swaps:
+                    session.add_all(swaps)
+                if burns:
+                    session.add_all(burns)
+                    session.add_all(buybacks)
                 pending = session.commit()
         if pending:
             await pending
