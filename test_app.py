@@ -1,5 +1,6 @@
 import asyncio
 import unittest
+from decimal import Decimal
 from time import time
 from unittest.mock import patch
 
@@ -9,6 +10,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import sessionmaker
 
 from models import Base, Pair, Swap, Token
+from processing import XOR_ID
 from run_node_processing import update_volumes
 from web import app, get_db
 
@@ -56,11 +58,11 @@ class ImportTest(DBTestCase):
         async def inner():
             # insert test data
             async with TestingSessionLocal() as session:
-                dai = Token(hash="0x1", name="D", decimals=18, symbol="DAI")
+                dai = Token(id=1, name="D", decimals=18, symbol="DAI")
                 session.add(dai)
-                xor = Token(hash="0x2", name="X", decimals=18, symbol="XOR")
+                xor = Token(id=int(XOR_ID, 16), name="X", decimals=18, symbol="XOR")
                 session.add(xor)
-                pair = Pair(token0=dai, token1=xor)
+                pair = Pair(from_token=dai, to_token=xor)
                 session.add(pair)
                 swap = Swap(
                     id=1,
@@ -68,9 +70,8 @@ class ImportTest(DBTestCase):
                     timestamp=time() * 1000,
                     pair=pair,
                     xor_fee=4,
-                    price=2,
-                    token0_amount=1,
-                    token1_amount=2,
+                    from_amount=1 * 10 ** 17,
+                    to_amount=2 * 10 ** 17,
                     filter_mode="mode",
                 )
                 session.add(swap)
@@ -80,9 +81,8 @@ class ImportTest(DBTestCase):
                     timestamp=time() * 1000,
                     pair=pair,
                     xor_fee=4,
-                    price=3,
-                    token0_amount=1,
-                    token1_amount=3,
+                    from_amount=1 * 10 ** 17,
+                    to_amount=3 * 10 ** 17,
                     filter_mode="mode",
                 )
                 session.add(swap)
@@ -91,13 +91,13 @@ class ImportTest(DBTestCase):
                 await update_volumes(session)
                 # check volume columns filled
                 pair = (await session.execute(select(Pair))).scalar()
-                self.assertEqual(pair.token0_volume, 2.0)
-                self.assertEqual(pair.token1_volume, 5.0)
+                self.assertEqual(pair.from_volume, Decimal("0.2"))
+                self.assertEqual(pair.to_volume, Decimal("0.5"))
                 dai, xor = (
                     await session.execute(select(Token).order_by(Token.id))
                 ).scalars()
-                self.assertEqual(dai.trade_volume, 2.0)
-                self.assertEqual(xor.trade_volume, 5.0)
+                self.assertEqual(dai.trade_volume, Decimal(".2"))
+                self.assertEqual(xor.trade_volume, Decimal(".5"))
 
         asyncio.run(inner())
 
@@ -107,11 +107,11 @@ class WebAppTest(DBTestCase):
         await super().asyncSetUp()
         # insert test data
         async with TestingSessionLocal() as session:
-            dai = Token(hash="0x1", name="D", decimals=18, symbol="DAI")
+            dai = Token(id=1, name="D", decimals=18, symbol="DAI")
             session.add(dai)
-            xor = Token(hash="0x2", name="X", decimals=18, symbol="XOR")
+            xor = Token(id=int(XOR_ID, 16), name="X", decimals=18, symbol="XOR")
             session.add(xor)
-            pair = Pair(token0=dai, token1=xor, token0_volume=2, token1_volume=5)
+            pair = Pair(from_token=dai, to_token=xor, from_volume=2, to_volume=5)
             session.add(pair)
             swap = Swap(
                 id=1,
@@ -119,9 +119,8 @@ class WebAppTest(DBTestCase):
                 timestamp=3,
                 pair=pair,
                 xor_fee=4,
-                price=2,
-                token0_amount=1,
-                token1_amount=2,
+                from_amount=1,
+                to_amount=2,
                 filter_mode="mode",
             )
             session.add(swap)
@@ -131,9 +130,8 @@ class WebAppTest(DBTestCase):
                 timestamp=5,
                 pair=pair,
                 xor_fee=4,
-                price=3,
-                token0_amount=1,
-                token1_amount=3,
+                from_amount=1,
+                to_amount=3,
                 filter_mode="mode",
             )
             session.add(swap)
@@ -146,46 +144,49 @@ class WebAppTest(DBTestCase):
         self.assertEqual(
             data,
             {
-                "0x1_0x2": {
-                    "base_id": "0x2",
-                    "base_name": "X",
-                    "base_symbol": "XOR",
-                    "base_volume": 5.0,
+                "0x"
+                + "0" * 63
+                + "1_"
+                + XOR_ID: {
+                    "base_id": "0x" + "0" * 63 + "1",
+                    "base_name": "D",
+                    "base_symbol": "DAI",
+                    "base_volume": 2.0,
                     "last_price": 3,
-                    "quote_id": "0x1",
-                    "quote_name": "D",
-                    "quote_symbol": "DAI",
-                    "quote_volume": 2.0,
+                    "quote_id": XOR_ID,
+                    "quote_name": "X",
+                    "quote_symbol": "XOR",
+                    "quote_volume": 5.0,
                 }
             },
         )
 
     @patch("web.get_whitelist")
     def test_pair_get(self, whitelist_mock):
-        whitelist_mock.return_value = [{"address": "0x1"}, {"address": "0x2"}]
+        whitelist_mock.return_value = [{"address": "0x1"}, {"address": XOR_ID}]
         response = client.get("/pairs/DAI-XOR")
         assert response.status_code == 200, response.text
         data = response.json()
         self.assertEqual(
             data,
             {
-                "base_id": "0x2",
-                "base_name": "X",
-                "base_symbol": "XOR",
-                "base_volume": 5.0,
+                "base_id": "0x" + "0" * 63 + "1",
+                "base_name": "D",
+                "base_symbol": "DAI",
+                "base_volume": 2.0,
                 "last_price": 3,
-                "quote_id": "0x1",
-                "quote_name": "D",
-                "quote_symbol": "DAI",
-                "quote_volume": 2.0,
+                "quote_id": XOR_ID,
+                "quote_name": "X",
+                "quote_symbol": "XOR",
+                "quote_volume": 5.0,
             },
         )
 
     def test_graphql_post(self):
         response = client.post(
-            "/graph", json=dict(query="{pairs{id, token0{symbol}, token1{symbol}}}")
+            "/graph", json=dict(query="{pairs{id, fromToken{symbol}, toToken{symbol}}}")
         )
-        assert response.status_code == 200, response
+        assert response.status_code == 200, response.text
         data = response.json()
         self.assertEqual(
             data,
@@ -194,8 +195,8 @@ class WebAppTest(DBTestCase):
                     "pairs": [
                         {
                             "id": "1",
-                            "token0": {"symbol": "DAI"},
-                            "token1": {"symbol": "XOR"},
+                            "fromToken": {"symbol": "DAI"},
+                            "toToken": {"symbol": "XOR"},
                         }
                     ]
                 }

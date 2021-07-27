@@ -1,13 +1,4 @@
-from sqlalchemy import (
-    BigInteger,
-    Column,
-    Float,
-    ForeignKey,
-    Index,
-    Integer,
-    Numeric,
-    String,
-)
+from sqlalchemy import BigInteger, Column, ForeignKey, Index, Integer, Numeric, String
 from sqlalchemy.orm import backref, declarative_base, relationship
 
 Base = declarative_base()
@@ -16,44 +7,47 @@ Base = declarative_base()
 class Token(Base):
     __tablename__ = "token"
 
-    id = Column(Integer, primary_key=True)
-    hash = Column(String(66), unique=True, nullable=False)
+    id = Column(Numeric(80), primary_key=True)
     symbol = Column(String(8), nullable=False)
     name = Column(String(128), nullable=False)
     decimals = Column(Integer, nullable=False)
     trade_volume = Column(Numeric())
 
+    @property
+    def hash(self):
+        return "0x%064x" % int(self.id)
+
 
 class Pair(Base):
     __tablename__ = "pair"
     id = Column(Integer, primary_key=True)
-    token0_id = Column(ForeignKey("token.id"), nullable=False)
-    token1_id = Column(ForeignKey("token.id"), nullable=False)
-    token0 = relationship(
+    from_token_id = Column(ForeignKey("token.id"), nullable=False)
+    to_token_id = Column(ForeignKey("token.id"), nullable=False)
+    from_volume = Column(Numeric())
+    to_volume = Column(Numeric())
+    from_token = relationship(
         Token,
-        foreign_keys=[token0_id],
-        backref=backref("pairs0", uselist=True, cascade="delete,all"),
+        foreign_keys=[from_token_id],
+        backref=backref("from_pairs", uselist=True, cascade="delete,all"),
     )
-    token1 = relationship(
+    to_token = relationship(
         Token,
-        foreign_keys=[token1_id],
-        backref=backref("pairs1", uselist=True, cascade="delete,all"),
+        foreign_keys=[to_token_id],
+        backref=backref("to_pairs", uselist=True, cascade="delete,all"),
     )
-    token0_volume = Column(Numeric())
-    token1_volume = Column(Numeric())
 
 
 class Swap(Base):
     __tablename__ = "swap"
 
-    id = Column(Numeric(80), primary_key=True)
+    id = Column(Integer, primary_key=True)
+    txid = Column(Numeric(80))
     block = Column(Integer, nullable=False)
     timestamp = Column(BigInteger, index=True, nullable=False)
     xor_fee = Column(Numeric(20), nullable=False)
     pair_id = Column(ForeignKey("pair.id"), nullable=False)
-    token0_amount = Column(Numeric(), nullable=False)
-    token1_amount = Column(Numeric(), nullable=False)
-    price = Column(Float)
+    from_amount = Column(Numeric(), nullable=False)
+    to_amount = Column(Numeric(), nullable=False)
     filter_mode = Column(String(32), nullable=False)
     swap_fee_amount = Column(Numeric(21))
     pair = relationship(
@@ -62,7 +56,33 @@ class Swap(Base):
 
     @property
     def hash(self):
-        return "0x%x" % int(self.id)
+        return "0x%064x" % int(self.txid)
+
+
+class Burn(Base):
+    __tablename__ = "burn"
+
+    id = Column(Integer, primary_key=True)
+    block = Column(Integer, nullable=False)
+    timestamp = Column(BigInteger, index=True, nullable=False)
+    token_id = Column(ForeignKey("token.id"), nullable=False)
+    amount = Column(Numeric(), nullable=False)
+    token = relationship(
+        Token, backref=backref("burns", uselist=True, cascade="delete,all")
+    )
+
+
+class BuyBack(Base):
+    __tablename__ = "buyback"
+
+    id = Column(Integer, primary_key=True)
+    block = Column(Integer, nullable=False)
+    timestamp = Column(BigInteger, index=True, nullable=False)
+    token_id = Column(ForeignKey("token.id"), nullable=False)
+    amount = Column(Numeric(), nullable=False)
+    token = relationship(
+        Token, backref=backref("buybacks", uselist=True, cascade="delete,all")
+    )
 
 
 Index("idx_swap_pair_timestamp_desc", Swap.pair_id, Swap.timestamp.desc())
