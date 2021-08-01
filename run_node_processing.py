@@ -17,6 +17,8 @@ from tqdm import trange
 
 from models import Burn, BuyBack, Pair, Swap, Token
 from processing import (
+    CURRENCIES,
+    DEPOSITED,
     PSWAP_ID,
     VAL_ID,
     XOR_ID,
@@ -328,17 +330,25 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                                 amount=xor_burned_estimated,
                             )
                         )
-                        # 50% xor is exchanged to val
-                        xor_dedicated_for_buy_back = get_event_param(events[idx + 2], 2)
-                        buybacks.append(
-                            BuyBack(
-                                block=block,
-                                timestamp=timestamp,
-                                token_id=xor_id_int,
-                                amount=xor_dedicated_for_buy_back,
-                            )
-                        )
-                        if len(events) > idx + 9:
+                        if len(events) > idx + 2:
+                            # 50% xor is exchanged to val
+                            buyback_event = events[idx + 2]
+                            if (
+                                buyback_event.value["module_id"] == CURRENCIES
+                                and buyback_event.value["event_id"] == DEPOSITED
+                            ):
+                                xor_dedicated_for_buy_back = get_event_param(
+                                    events[idx + 2], 2
+                                )
+                                buybacks.append(
+                                    BuyBack(
+                                        block=block,
+                                        timestamp=timestamp,
+                                        token_id=xor_id_int,
+                                        amount=xor_dedicated_for_buy_back,
+                                    )
+                                )
+                        if len(events) > idx + 10:
                             # exchanged val burned
                             event_with_val_burned = events[idx + 9]
                             # 10% burned val is reminted to parliament
