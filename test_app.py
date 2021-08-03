@@ -111,13 +111,15 @@ class WebAppTest(DBTestCase):
             session.add(dai)
             xor = Token(id=int(XOR_ID, 16), name="X", decimals=18, symbol="XOR")
             session.add(xor)
-            pair = Pair(from_token=dai, to_token=xor, from_volume=2, to_volume=5)
-            session.add(pair)
+            dai_xor = Pair(from_token=dai, to_token=xor, from_volume=1, to_volume=2)
+            xor_dai = Pair(from_token=xor, to_token=dai, from_volume=4, to_volume=8)
+            session.add(dai_xor)
+            session.add(xor_dai)
             swap = Swap(
                 id=1,
                 block=2,
                 timestamp=3,
-                pair=pair,
+                pair=dai_xor,
                 xor_fee=4,
                 from_amount=1,
                 to_amount=2,
@@ -128,7 +130,7 @@ class WebAppTest(DBTestCase):
                 id=2,
                 block=4,
                 timestamp=5,
-                pair=pair,
+                pair=dai_xor,
                 xor_fee=4,
                 from_amount=1,
                 to_amount=3,
@@ -151,12 +153,12 @@ class WebAppTest(DBTestCase):
                     "base_id": "0x" + "0" * 63 + "1",
                     "base_name": "D",
                     "base_symbol": "DAI",
-                    "base_volume": 2.0,
+                    "base_volume": 9,
                     "last_price": 3,
                     "quote_id": XOR_ID,
                     "quote_name": "X",
                     "quote_symbol": "XOR",
-                    "quote_volume": 5.0,
+                    "quote_volume": 6,
                 }
             },
         )
@@ -173,12 +175,12 @@ class WebAppTest(DBTestCase):
                 "base_id": "0x" + "0" * 63 + "1",
                 "base_name": "D",
                 "base_symbol": "DAI",
-                "base_volume": 2.0,
+                "base_volume": 9,
                 "last_price": 3,
                 "quote_id": XOR_ID,
                 "quote_name": "X",
                 "quote_symbol": "XOR",
-                "quote_volume": 5.0,
+                "quote_volume": 6,
             },
         )
 
@@ -197,7 +199,12 @@ class WebAppTest(DBTestCase):
                             "id": "1",
                             "fromToken": {"symbol": "DAI"},
                             "toToken": {"symbol": "XOR"},
-                        }
+                        },
+                        {
+                            "id": "2",
+                            "fromToken": {"symbol": "XOR"},
+                            "toToken": {"symbol": "DAI"},
+                        },
                     ]
                 }
             },

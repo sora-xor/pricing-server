@@ -160,13 +160,9 @@ async def update_volumes(session):
     await session.execute(
         update(Pair).values(
             from_volume=select(func.sum(Swap.from_amount / div))
-            .join(Pair, Swap.pair_id == Pair.id)
-            .join(Token, Pair.from_token_id == Token.id)
             .where(and_(Swap.pair_id == Pair.id, Swap.timestamp > last_24h))
             .scalar_subquery(),
             to_volume=select(func.sum(Swap.to_amount / div))
-            .join(Pair, Swap.pair_id == Pair.id)
-            .join(Token, Pair.to_token_id == Token.id)
             .where(and_(Swap.pair_id == Pair.id, Swap.timestamp > last_24h))
             .scalar_subquery(),
         )
