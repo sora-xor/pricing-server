@@ -204,26 +204,26 @@ async def pairs(session=Depends(get_db)):
                 "quote_name": quote.name,
                 "quote_symbol": quote.symbol,
                 "last_price": last_price,
-                "base_volume": base_volume,
-                "quote_volume": quote_volume,
+                "base_volume": base_volume or 0,
+                "quote_volume": quote_volume or 0,
             }
     return pairs
 
 
 class PairResponse(BaseModel):
     base_id: str = Field(
+        "0x0200040000000000000000000000000000000000000000000000000000000000"
+    )
+    base_name: str = Field("SORA Validator Token")
+    base_symbol: str = Field("VAL")
+    quote_id: str = Field(
         "0x0200000000000000000000000000000000000000000000000000000000000000"
     )
-    base_name: str = Field("SORA")
-    base_symbol: str = Field("XOR")
-    quote_id: str = Field(
-        "0x0200050000000000000000000000000000000000000000000000000000000000"
-    )
-    quote_name: str = Field("Polkaswap")
-    quote_symbol: str = Field(example="PSWAP")
+    quote_name: str = Field("SORA")
+    quote_symbol: str = Field(example="XOR")
     last_price: float = Field(example=12.34)
-    base_volume: int = Field(example=1000)
-    quote_volume: int = Field(example=1000)
+    base_volume: float = Field(example=5.6)
+    quote_volume: float = Field(example=7.8)
 
 
 @app.get("/pairs/{base}-{quote}/", response_model=PairResponse)
@@ -249,6 +249,18 @@ async def pair(base: str, quote: str, session=Depends(get_db)):
     pair = pair.scalar()
     if not pair:
         raise HTTPException(status_code=404, detail="Pair not found")
+    reverse = await session.execute(
+        select(Pair).where(
+            Pair.from_token_id == pair.to_token_id,
+            Pair.to_token_id == pair.from_token_id,
+        )
+    )
+    base_volume = pair.from_volume or 0
+    quote_volume = pair.to_volume or 0
+    reverse = reverse.scalar()
+    if reverse and reverse.to_volume and reverse.from_volume:
+        base_volume += reverse.to_volume
+        quote_volume += reverse.from_volume
     base = pair.from_token
     quote = pair.to_token
     if quote.id != int(XOR_ID, 16):
@@ -269,8 +281,8 @@ async def pair(base: str, quote: str, session=Depends(get_db)):
         "quote_name": quote.name,
         "quote_symbol": quote.symbol,
         "last_price": price,
-        "base_volume": pair.from_volume or 0,
-        "quote_volume": pair.to_volume or 0,
+        "base_volume": base_volume,
+        "quote_volume": quote_volume,
     }
 
 
