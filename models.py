@@ -49,7 +49,7 @@ class Swap(Base):
     from_amount = Column(Numeric(), nullable=False)
     to_amount = Column(Numeric(), nullable=False)
     filter_mode = Column(String(32), nullable=False)
-    swap_fee_amount = Column(Numeric(21))
+    swap_fee_amount = Column(Numeric())
     pair = relationship(
         Pair, backref=backref("swaps", uselist=True, cascade="delete,all")
     )
