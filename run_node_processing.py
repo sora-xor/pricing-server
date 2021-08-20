@@ -72,7 +72,7 @@ def process_events(dataset, new_map, result, grouped_events):
     for extrinsic in result["block"]["extrinsics"]:
         extrinsic_events = grouped_events[extrinsic_idx]
         extrinsic_idx += 1
-        exdict = extrinsic.value
+        exdict = extrinsic and extrinsic.value
         if exdict and should_be_processed(exdict):
             tx_type = exdict["call_function"]
             processing_func = new_map.get(tx_type)
