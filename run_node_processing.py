@@ -24,7 +24,6 @@ from processing import (
     XOR_ID,
     get_processing_functions,
     get_timestamp,
-    should_be_processed,
 )
 
 
@@ -44,6 +43,9 @@ def connect_to_substrate_node():
 
 
 def get_events_from_block(substrate, block_id: int):
+    """
+    Return events from block number <block_id> grouped by extrinsic_id.
+    """
     block_hash = substrate.get_block_hash(block_id=block_id)
 
     # Retrieve extrinsics in block
@@ -52,6 +54,7 @@ def get_events_from_block(substrate, block_id: int):
     )
     events = substrate.get_events(block_hash)
 
+    # group events by extrinsic_idx in dict
     grouped_events: Dict[int, List] = {}
     for event in events:
         event = str(event)
@@ -65,7 +68,10 @@ def get_events_from_block(substrate, block_id: int):
     return events, result, grouped_events
 
 
-def process_events(dataset, new_map, result, grouped_events):
+def process_events(dataset, func_map, result, grouped_events):
+    """
+    Call function from func_map for every extrinsic depending on extrinsic type.
+    """
     extrinsic_idx = 0
     timestamp = get_timestamp(result)
 
@@ -73,9 +79,9 @@ def process_events(dataset, new_map, result, grouped_events):
         extrinsic_events = grouped_events[extrinsic_idx]
         extrinsic_idx += 1
         exdict = extrinsic and extrinsic.value
-        if exdict and should_be_processed(exdict):
+        if exdict and "call_function" in exdict.keys():
             tx_type = exdict["call_function"]
-            processing_func = new_map.get(tx_type)
+            processing_func = func_map.get(tx_type)
             if processing_func:
                 tx = processing_func(timestamp, extrinsic_events, exdict)
                 if tx:
@@ -122,6 +128,9 @@ async def get_all_pairs(session):
 
 
 async def update_volumes(session):
+    """
+    Update Pair.from_volume, Pair.to_volume and Token.trade_volume.
+    """
     last_24h = (time() - 24 * 3600) * 1000
     div = Decimal(10 ** 18)
     await session.execute(
@@ -181,6 +190,9 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
     func_map = {
         k: v for k, v in get_processing_functions().items() if k in selected_events
     }
+    xor_id_int = int(XOR_ID, 16)
+    val_id_int = int(VAL_ID, 16)
+    pswap_id_int = int(PSWAP_ID, 16)
     async with async_session() as session:
         # cache list of pairs in memory
         # to avoid SELECTing them everytime there is need to lookup ID by hash
@@ -193,9 +205,8 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
         pending = None
         if not silent:
             logging.info("Importing from %i to %i", begin, end)
-        xor_id_int = int(XOR_ID, 16)
-        val_id_int = int(VAL_ID, 16)
-        pswap_id_int = int(PSWAP_ID, 16)
+        # make sure XOR, VAL and PSWAP token entries created
+        # be able to import burns and buybacks
         await get_or_create_token(substrate, session, xor_id_int)
         await get_or_create_token(substrate, session, val_id_int)
         await get_or_create_token(substrate, session, pswap_id_int)
@@ -385,12 +396,14 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                                         )
                                     )
             if swaps or burns:
+                # save instances to DB
                 if swaps:
                     session.add_all(swaps)
                 if burns:
                     session.add_all(burns)
                     session.add_all(buybacks)
                 pending = session.commit()
+        # wait for pending DB commit to finish
         if pending:
             await pending
         if not silent:
@@ -399,6 +412,9 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
 
 
 async def async_main_loop(async_session, args):
+    """
+    Run import in an infinite loop.
+    """
     while True:
         await async_main(async_session, args.begin, args.clean, args.silent)
         if not args.silent:
@@ -408,6 +424,8 @@ async def async_main_loop(async_session, args):
 
 if __name__ == "__main__":
     from db import async_session
+
+    # parse command line arguments
 
     parser = argparse.ArgumentParser(
         description="Import swap history from Substrate node into DB."

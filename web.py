@@ -9,7 +9,7 @@ from graphene import Enum, Int, String
 from graphene_sqlalchemy import SQLAlchemyObjectType
 from graphql.execution.executors.asyncio import AsyncioExecutor
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, desc
+from sqlalchemy import and_, desc, or_
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from starlette.graphql import GraphQLApp
@@ -23,6 +23,9 @@ __cache = {}
 
 
 def get_whitelist():
+    """
+    Download whitelisted tokens. Cache result for 1 day.
+    """
     KEY = "whitelist"
     if KEY not in __cache or __cache[KEY]["updated"] < time() - 24 * 3600:
         __cache[KEY] = {"data": requests.get(WHITELIST_URL).json(), "updated": time()}
@@ -30,6 +33,9 @@ def get_whitelist():
 
 
 async def get_db():
+    """
+    Open async DB session. To be used as FastAPI dependency.
+    """
     from db import async_session
 
     async with async_session() as session:
@@ -39,10 +45,6 @@ async def get_db():
 class TokenType(SQLAlchemyObjectType):
     class Meta:
         model = Token
-        # use `only_fields` to only expose specific fields ie "name"
-        # only_fields = ("name",)
-        # use `exclude_fields` to exclude specific fields ie "last_name"
-        # exclude_fields = ("last_name",)
 
 
 class PairType(SQLAlchemyObjectType):
@@ -79,6 +81,12 @@ class OrderBy(Enum):
 async def resolve_paginated(
     q, info, first=10, skip=None, offset=None, orderBy=None, orderDirection=None
 ):
+    """
+    Utility function to handle skip, offset etc GraphQL query parameters
+    and convert to equivalent SQL operators.
+    q - base SQLAlchemy query
+    info - Graphene request info
+    """
     first = min(1000, first)  # limit max reply size
     q = q.limit(first)
     if orderBy:
@@ -147,6 +155,9 @@ app = FastAPI()
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
+    """
+    Return short info & endpoints index.
+    """
     return """
         <!DOCTYPE html>
         <title>SORA Pricing Server</title>
@@ -162,9 +173,13 @@ async def root():
 
 @app.get("/pairs/")
 async def pairs(session=Depends(get_db)):
-    # fetch all pairs info
+    """
+    Returns information on pairs.
+    """
     pairs = {}
     xor_id_int = int(XOR_ID, 16)
+    # fetch all pairs info
+    # select last swap for each pair in subquery to obtain price
     for p, last_price in await session.execute(
         select(
             Pair,
@@ -175,22 +190,29 @@ async def pairs(session=Depends(get_db)):
             .scalar_subquery(),
         ).options(selectinload(Pair.from_token), selectinload(Pair.to_token))
     ):
+        # there are separate pairs for selling and buying XOR
+        # need to sum them to calculate total volumes
         if p.from_token_id == xor_id_int:
+            # <p> contains XOR->XXX swaps
             base = p.to_token
             base_volume = p.to_volume
             quote = p.from_token
             quote_volume = p.from_volume
             if last_price:
+                # reverse price
                 last_price = 1 / last_price
         else:
-            # should be no non-XOR pairs
+            # should be no non-XOR pairs in DB
             assert p.to_token_id == xor_id_int
+            # <p> contains XXX->XOR swaps
             base = p.from_token
             base_volume = p.from_volume
             quote = p.to_token
             quote_volume = p.to_volume
+        # quote is always XOR
         id = base.hash + "_" + quote.hash
         if id in pairs:
+            # sum up buying and sellling volumes
             if base_volume:
                 pairs[id]["base_volume"] += base_volume
             if quote_volume:
@@ -211,6 +233,11 @@ async def pairs(session=Depends(get_db)):
 
 
 class PairResponse(BaseModel):
+    """
+    Definition of specific pair endpoint response format.
+    Used to generate docs.
+    """
+
     base_id: str = Field(
         "0x0200040000000000000000000000000000000000000000000000000000000000"
     )
@@ -228,10 +255,14 @@ class PairResponse(BaseModel):
 
 @app.get("/pairs/{base}-{quote}/", response_model=PairResponse)
 async def pair(base: str, quote: str, session=Depends(get_db)):
+    """
+    Return pricing and volume information on specific pair.
+    """
     # get pair and its tokens info
     from_token = Token.__table__.alias("from_token")
     to_token = Token.__table__.alias("to_token")
     whitelist = [Decimal(int(token["address"], 16)) for token in get_whitelist()]
+    # get volume of base->quote swaps
     pair = await session.execute(
         select(Pair)
         .options(selectinload(Pair.from_token), selectinload(Pair.to_token))
@@ -249,6 +280,9 @@ async def pair(base: str, quote: str, session=Depends(get_db)):
     pair = pair.scalar()
     if not pair:
         raise HTTPException(status_code=404, detail="Pair not found")
+    base = pair.from_token
+    quote = pair.to_token
+    # get volume of quote->base swaps
     reverse = await session.execute(
         select(Pair).where(
             Pair.from_token_id == pair.to_token_id,
@@ -258,17 +292,15 @@ async def pair(base: str, quote: str, session=Depends(get_db)):
     base_volume = pair.from_volume or 0
     quote_volume = pair.to_volume or 0
     reverse = reverse.scalar()
+    # sum up volumes
     if reverse and reverse.to_volume and reverse.from_volume:
         base_volume += reverse.to_volume
         quote_volume += reverse.from_volume
-    base = pair.from_token
-    quote = pair.to_token
-    if quote.id != int(XOR_ID, 16):
-        raise HTTPException(status_code=404, detail="Pair not found")
-    price = (
+    # query current price (price of last swap of such pair)
+    last_swap = (
         await session.execute(
-            select(Swap.to_amount / Swap.from_amount)
-            .where(Swap.pair_id == pair.id)
+            select(Swap)
+            .where(or_(Swap.pair_id == pair.id, Swap.pair_id == reverse.id))
             .order_by(Swap.timestamp.desc())
             .limit(1)
         )
@@ -280,7 +312,9 @@ async def pair(base: str, quote: str, session=Depends(get_db)):
         "quote_id": quote.hash,
         "quote_name": quote.name,
         "quote_symbol": quote.symbol,
-        "last_price": price,
+        "last_price": last_swap.to_amount / last_swap.from_amount
+        if last_swap.pair_id == pair.id
+        else last_swap.from_amount / last_swap.to_amount,
         "base_volume": base_volume,
         "quote_volume": quote_volume,
     }
@@ -288,6 +322,9 @@ async def pair(base: str, quote: str, session=Depends(get_db)):
 
 @app.get("/graph")
 async def graphql_get(request: Request):
+    """
+    Return interactive GraphiQL interface.
+    """
     return await GraphQLApp(
         schema=graphene.Schema(query=Query), executor_class=AsyncioExecutor
     ).handle_graphql(request)
@@ -295,6 +332,9 @@ async def graphql_get(request: Request):
 
 @app.post("/graph")
 async def graphql_post(request: Request, db=Depends(get_db)):
+    """
+    Handle GraphQL queries.
+    """
     gapp = GraphQLApp(
         schema=graphene.Schema(query=Query), executor_class=AsyncioExecutor
     )
