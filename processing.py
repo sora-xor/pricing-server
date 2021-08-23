@@ -24,19 +24,6 @@ CURRENCIES = "Currencies"
 DEPOSITED = "Deposited"
 
 
-def event_params(exdict):
-    # Account id
-    if "account_id" in exdict.keys():
-        print("account_id", "0x" + exdict["account_id"])
-    # Extrinsic hash
-    if "extrinsic_hash" in exdict.keys():
-        print("tx hash", "0x" + exdict["extrinsic_hash"])
-
-
-def should_be_processed(exdict):
-    return "call_function" in exdict.keys()
-
-
 def get_fees_from_event(event) -> float:
     if event["event_id"] == "FeeWithdrawn":
         return event["params"][1]["value"]
