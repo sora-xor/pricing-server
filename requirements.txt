@@ -8,6 +8,6 @@ gunicorn>=20.1.0
 python-decouple>=3.4
 scalecodec>=0.11.13
 sqlalchemy>=1.4.19
-substrate-interface!=0.13.9
+substrate-interface>=0.13.12
 tqdm>=4.61.1
 uvicorn>=0.14.0
