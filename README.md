@@ -7,7 +7,7 @@ This tool imports history of swap transactions from Substrate node into relation
 
 1. Clone repository
 ```bash
-git clone https://github.com/yuriiz/pricing-server
+git clone https://github.com/sora-xor/pricing-server
 cd pricing-server/
 ```
 
@@ -42,6 +42,17 @@ http://localhost/healthcheck - Healthcheck endpoint. Returns 200 OK. Can be used
 ```bash
 python -munittest  # in project directory
 ```
+
+## Troubleshoot
+When certain block are not being processed or no blocks at all then most likely there is a missing or invalid type definition in the `custom_types.json`
+
+Use the `query.py` file. It can be run with:
+```bash
+cd harvester
+python -m pip install -r requirements.txt
+python query.py
+```
+
 
 ## System requirements
 
