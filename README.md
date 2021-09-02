@@ -7,7 +7,7 @@ This tool imports history of swap transactions from Substrate node into relation
 
 1. Clone repository
 ```bash
-git clone https://github.com/yuriiz/pricing-server
+https://github.com/sora-xor/pricing-server.git
 cd pricing-server/
 ```
 
