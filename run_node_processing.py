@@ -46,6 +46,7 @@ def get_events_from_block(substrate, block_id: int):
     """
     Return events from block number <block_id> grouped by extrinsic_id.
     """
+    logging.info("Getting events from block %i", block_id)
     block_hash = substrate.get_block_hash(block_id=block_id)
 
     # Retrieve extrinsics in block
