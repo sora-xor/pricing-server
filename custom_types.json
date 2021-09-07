@@ -1,10 +1,9 @@
 {
-  "runtime_id": 0,
-  "types": {},
+  "runtime_id": 1,
   "versioning": [
     {
       "runtime_range": [
-        0,
+        1,
         null
       ],
       "types": {
@@ -14,38 +13,13 @@
         "Sr25519Public": "[u8; 32]",
         "SessionKeys2": "(Sr25519Public, Sr25519Public)",
         "SessionKeys3": "(Sr25519Public, Sr25519Public, Sr25519Public)",
+        "AccountInfo": "AccountInfoWithDualRefCount",
         "Address": "AccountIdAddress",
         "Amount": "i128",
         "AmountOf": "Amount",
         "AssetId32": "[u8; 32]",
         "AssetId": "AssetId32",
         "AssetIdOf": "AssetId",
-        "MultiChainHeight": {
-          "type": "enum",
-          "type_mapping": [
-            [
-              "Thischain",
-              "BlockNumber"
-            ],
-            [
-              "Sidechain",
-              "u64"
-            ]
-          ]
-        },
-        "BridgeTimepoint": {
-          "type": "struct",
-          "type_mapping": [
-            [
-              "height",
-              "MultiChainHeight"
-            ],
-            [
-              "index",
-              "u32"
-            ]
-          ]
-        },
         "AssetInfo": {
           "type": "struct",
           "type_mapping": [
@@ -73,7 +47,7 @@
         },
         "AssetKind": {
           "type": "enum",
-          "value_list": [
+          "values_list": [
             "Thischain",
             "Sidechain",
             "SidechainOwned"
@@ -97,17 +71,29 @@
         "BalancePrecision": "u8",
         "BasisPoints": "u16",
         "BridgeNetworkId": "u32",
-        "NetworkId": "BridgeNetworkId",
         "BridgeStatus": {
           "type": "enum",
-          "value_list": [
+          "values_list": [
             "Initialized",
             "Migrating"
           ]
         },
+        "BridgeTimepoint": {
+          "type": "struct",
+          "type_mapping": [
+            [
+              "height",
+              "MultiChainHeight"
+            ],
+            [
+              "index",
+              "u32"
+            ]
+          ]
+        },
         "ChangePeersContract": {
           "type": "enum",
-          "value_list": [
+          "values_list": [
             "XOR",
             "VAL"
           ]
@@ -140,7 +126,6 @@
           ]
         },
         "CurrencyIdOf": "AssetId",
-        "T::AccountId": "AccountId",
         "CustomInfo": {
           "type": "struct",
           "type_mapping": [
@@ -197,6 +182,13 @@
         },
         "DistributionAccounts": "Null",
         "Duration": "Null",
+        "EthBridgeStorageVersion": {
+          "type": "enum",
+          "values_list": [
+            "V1",
+            "V2RemovePendingTransfers"
+          ]
+        },
         "EthPeersSync": {
           "type": "struct",
           "type_mapping": [
@@ -219,7 +211,7 @@
         "Farmer": "Null",
         "FilterMode": {
           "type": "enum",
-          "value_list": [
+          "values_list": [
             "Disabled",
             "ForbidSelected",
             "AllowSelected"
@@ -423,7 +415,7 @@
         },
         "IncomingMetaRequestKind": {
           "type": "enum",
-          "value_list": [
+          "values_list": [
             "CancelOutgoingRequest",
             "MarkAsDone"
           ]
@@ -530,7 +522,7 @@
         },
         "IncomingTransactionRequestKind": {
           "type": "enum",
-          "value_list": [
+          "values_list": [
             "Transfer",
             "AddAsset",
             "AddPeer",
@@ -584,17 +576,51 @@
             [
               "network_id",
               "BridgeNetworkId"
-            ],
-            [
-              "should_take_fee",
-              "bool"
             ]
           ]
         },
         "Keys": "SessionKeys3",
+        "LPRewardsInfo": {
+          "type": "struct",
+          "type_mapping": [
+            [
+              "amount",
+              "Balance"
+            ],
+            [
+              "currency",
+              "AssetId"
+            ],
+            [
+              "reason",
+              "RewardReason"
+            ]
+          ]
+        },
+        "LPSwapOutcomeInfo": {
+          "type": "struct",
+          "type_mapping": [
+            [
+              "amount",
+              "Balance"
+            ],
+            [
+              "fee",
+              "Balance"
+            ],
+            [
+              "rewards",
+              "Vec<LPRewardsInfo>"
+            ],
+            [
+              "amount_without_impact",
+              "Balance"
+            ]
+          ]
+        },
         "LiquiditySourceType": {
           "type": "enum",
-          "value_list": [
+          "values_list": [
             "XYKPool",
             "BondingCurvePool",
             "MulticollateralBondingCurvePool",
@@ -668,11 +694,37 @@
           ]
         },
         "LookupSource": "AccountId",
+        "MarketMakerInfo": {
+          "type": "struct",
+          "type_mapping": [
+            [
+              "count",
+              "u32"
+            ],
+            [
+              "volume",
+              "Balance"
+            ]
+          ]
+        },
         "Mode": {
           "type": "enum",
-          "value_list": [
+          "values_list": [
             "Permit",
             "Forbid"
+          ]
+        },
+        "MultiChainHeight": {
+          "type": "enum",
+          "type_mapping": [
+            [
+              "Thischain",
+              "BlockNumber"
+            ],
+            [
+              "Sidechain",
+              "u64"
+            ]
           ]
         },
         "MultiCurrencyBalance": "Balance",
@@ -1226,6 +1278,23 @@
         "PendingMultisigAccount": "Null",
         "Permission": "Null",
         "PermissionId": "u32",
+        "PoolFarmer": {
+          "type": "struct",
+          "type_mapping": [
+            [
+              "account",
+              "AccountId"
+            ],
+            [
+              "block",
+              "BlockNumber"
+            ],
+            [
+              "weight",
+              "Balance"
+            ]
+          ]
+        },
         "PostDispatchInfo": {
           "type": "struct",
           "type_mapping": [
@@ -1236,6 +1305,31 @@
             [
               "pays_fee",
               "Pays"
+            ]
+          ]
+        },
+        "PriceInfo": {
+          "type": "struct",
+          "type_mapping": [
+            [
+              "price_failures",
+              "u32"
+            ],
+            [
+              "spot_prices",
+              "Vec<Balance>"
+            ],
+            [
+              "average_price",
+              "Balance"
+            ],
+            [
+              "needs_update",
+              "bool"
+            ],
+            [
+              "last_spot_price",
+              "Balance"
             ]
           ]
         },
@@ -1274,7 +1368,7 @@
         "RefCount": "u32",
         "RequestStatus": {
           "type": "enum",
-          "value_list": [
+          "values_list": [
             "Pending",
             "Frozen",
             "ApprovalsReady",
@@ -1282,17 +1376,30 @@
             "Done"
           ]
         },
-        "Result<IncomingRequest, DispatchError>": {
-          "type": "enum",
+        "RewardInfo": {
+          "type": "struct",
           "type_mapping": [
             [
-              "Ok",
-              "IncomingRequest"
+              "limit",
+              "Balance"
             ],
             [
-              "Err",
-              "DispatchError"
+              "total_available",
+              "Balance"
+            ],
+            [
+              "rewards",
+              "BTreeMap<RewardReason, Balance>"
             ]
+          ]
+        },
+        "RewardReason": {
+          "type": "enum",
+          "values_list": [
+            "Unspecified",
+            "BuyOnBondingCurve",
+            "LiquidityProvisionFarming",
+            "MarketMakerVolume"
           ]
         },
         "Scope": {
@@ -1325,13 +1432,8 @@
             ]
           ]
         },
-        "BTreeSet<SignatureParams>": "Vec<SignatureParams>",
-        "BTreeSet<H256>": "Vec<H256>",
-        "BTreeSet<AssetId>": "Vec<AssetId>",
-        "BTreeSet<AccountId>": "Vec<AccountId>",
-        "BTreeSet<LiquiditySourceType>": "Vec<LiquiditySourceType>",
-        "ecdsa::Public": "[u8; 33]",
         "SmoothPriceState": "Null",
+        "StorageVersion": "Null",
         "SwapAction": "Null",
         "SwapAmount": {
           "type": "enum",
@@ -1374,7 +1476,7 @@
         },
         "SwapVariant": {
           "type": "enum",
-          "value_list": [
+          "values_list": [
             "WithDesiredInput",
             "WithDesiredOutput"
           ]
@@ -1463,111 +1565,7 @@
           ]
         },
         "ValidationFunction": "Null",
-        "RewardReason": {
-          "type": "enum",
-          "value_list": [
-            "Unspecified",
-            "BuyOnBondingCurve"
-          ]
-        },
-        "BTreeMap<RewardReason,Balance>": "Vec<(RewardReason,Balance)>",
-        "RewardInfo": {
-          "type": "struct",
-          "type_mapping": [
-            [
-              "limit",
-              "Balance"
-            ],
-            [
-              "total_available",
-              "Balance"
-            ],
-            [
-              "rewards",
-              "BTreeMap<RewardReason,Balance>"
-            ]
-          ]
-        },
-        "StorageVersion": "Null",
-        "MarketMakerInfo": {
-          "type": "struct",
-          "type_mapping": [
-            [
-              "count",
-              "u32"
-            ],
-            [
-              "volume",
-              "Balance"
-            ]
-          ]
-        },
-        "EthBridgeStorageVersion": {
-          "type":  "enum",
-          "value_list": [
-            "V1",
-            "V2RemovePendingTransfers"
-          ]
-        }
-      }
-    },
-    {
-      "runtime_range": [
-        4,
-        null
-      ],
-      "types": {
-        "RewardReason": {
-          "type": "enum",
-          "value_list": [
-            "Unspecified",
-            "BuyOnBondingCurve",
-            "LiquidityProvisionFarming",
-            "MarketMakerVolume"
-          ]
-        },
-        "PoolFarmer": {
-          "type": "struct",
-          "type_mapping": [
-            [
-              "account",
-              "AccountId"
-            ],
-            [
-              "block",
-              "BlockNumber"
-            ],
-            [
-              "weight",
-              "Balance"
-            ]
-          ]
-        },
-        "PriceInfo": {
-          "type": "struct",
-          "type_mapping": [
-            [
-              "price_failures",
-              "u32"
-            ],
-            [
-              "spot_prices",
-              "Vec<Balance>"
-            ],
-            [
-              "average_price",
-              "Balance"
-            ],
-            [
-              "needs_update",
-              "bool"
-            ],
-            [
-              "last_spot_price",
-              "Balance"
-            ]
-          ]
-        }
+        "Timepoint": "BridgeTimepoint"
       }
     }
   ]
