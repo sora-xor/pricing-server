@@ -47,7 +47,7 @@
         },
         "AssetKind": {
           "type": "enum",
-          "values_list": [
+          "value_list": [
             "Thischain",
             "Sidechain",
             "SidechainOwned"
@@ -73,7 +73,7 @@
         "BridgeNetworkId": "u32",
         "BridgeStatus": {
           "type": "enum",
-          "values_list": [
+          "value_list": [
             "Initialized",
             "Migrating"
           ]
@@ -93,7 +93,7 @@
         },
         "ChangePeersContract": {
           "type": "enum",
-          "values_list": [
+          "value_list": [
             "XOR",
             "VAL"
           ]
@@ -184,7 +184,7 @@
         "Duration": "Null",
         "EthBridgeStorageVersion": {
           "type": "enum",
-          "values_list": [
+          "value_list": [
             "V1",
             "V2RemovePendingTransfers"
           ]
@@ -211,7 +211,7 @@
         "Farmer": "Null",
         "FilterMode": {
           "type": "enum",
-          "values_list": [
+          "value_list": [
             "Disabled",
             "ForbidSelected",
             "AllowSelected"
@@ -415,7 +415,7 @@
         },
         "IncomingMetaRequestKind": {
           "type": "enum",
-          "values_list": [
+          "value_list": [
             "CancelOutgoingRequest",
             "MarkAsDone"
           ]
@@ -522,7 +522,7 @@
         },
         "IncomingTransactionRequestKind": {
           "type": "enum",
-          "values_list": [
+          "value_list": [
             "Transfer",
             "AddAsset",
             "AddPeer",
@@ -620,7 +620,7 @@
         },
         "LiquiditySourceType": {
           "type": "enum",
-          "values_list": [
+          "value_list": [
             "XYKPool",
             "BondingCurvePool",
             "MulticollateralBondingCurvePool",
@@ -709,7 +709,7 @@
         },
         "Mode": {
           "type": "enum",
-          "values_list": [
+          "value_list": [
             "Permit",
             "Forbid"
           ]
@@ -1368,7 +1368,7 @@
         "RefCount": "u32",
         "RequestStatus": {
           "type": "enum",
-          "values_list": [
+          "value_list": [
             "Pending",
             "Frozen",
             "ApprovalsReady",
@@ -1395,7 +1395,7 @@
         },
         "RewardReason": {
           "type": "enum",
-          "values_list": [
+          "value_list": [
             "Unspecified",
             "BuyOnBondingCurve",
             "LiquidityProvisionFarming",
@@ -1476,7 +1476,7 @@
         },
         "SwapVariant": {
           "type": "enum",
-          "values_list": [
+          "value_list": [
             "WithDesiredInput",
             "WithDesiredOutput"
           ]
