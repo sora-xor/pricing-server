@@ -3,12 +3,12 @@ from scalecodec.type_registry import load_type_registry_file
 from substrateinterface import SubstrateInterface
 
 substrate = SubstrateInterface(
-    url='wss://ws.framenode-8.s5.stg1.sora2.soramitsu.co.jp/',
+    url='wss://mof2.sora.org/',
     type_registry_preset='default',
     type_registry=load_type_registry_file('./custom_types.json'),
 )
 
-block_hash = substrate.get_block_hash(block_id=1109018)
+block_hash = substrate.get_block_hash(block_id=1829015)
 
 extrinsics = substrate.get_block(block_hash=block_hash)['extrinsics']
 

@@ -13,7 +13,6 @@
         "Sr25519Public": "[u8; 32]",
         "SessionKeys2": "(Sr25519Public, Sr25519Public)",
         "SessionKeys3": "(Sr25519Public, Sr25519Public, Sr25519Public)",
-        "AccountInfo": "AccountInfoWithDualRefCount",
         "Address": "AccountIdAddress",
         "Amount": "i128",
         "AmountOf": "Amount",
@@ -1572,6 +1571,7 @@
         "BTreeSet<SignatureParams>": "Vec<SignatureParams>",
         "BTreeSet<H256>": "Vec<H256>",
         "BTreeSet<AssetId>": "Vec<AssetId>",
+        "BTreeSet<AssetIdOf>": "Vec<AssetIdOf>",
         "BTreeSet<AccountId>": "Vec<AccountId>",
         "BTreeSet<LiquiditySourceType>": "Vec<LiquiditySourceType>",
         "ecdsa::Public": "[u8; 33]",
@@ -1590,5 +1590,9 @@
         }
       }
     }
+  ],
+  "runtime_upgrades": [
+    [0, 1], [489600, 3], [616533, 4], [1243341, 7], [1403659, 8],
+    [1744716, 9]
   ]
 }
