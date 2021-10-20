@@ -138,15 +138,15 @@ async def update_volumes(session):
         update(Token).values(
             trade_volume=func.coalesce(
                 select(func.sum(Swap.from_amount) / div)
-                .join(Pair, Pair.from_token_id == Token.id)
-                .where(Swap.timestamp > last_24h)
+                .join(Pair, Pair.id == Swap.pair_id)
+                .where(and_(Swap.timestamp > last_24h, Pair.from_token_id == Token.id))
                 .scalar_subquery(),
                 0,
             )
             + func.coalesce(
                 select(func.sum(Swap.to_amount) / div)
-                .join(Pair, Pair.to_token_id == Token.id)
-                .where(Swap.timestamp > last_24h)
+                .join(Pair, Pair.id == Swap.pair_id)
+                .where(and_(Swap.timestamp > last_24h, Pair.to_token_id == Token.id))
                 .scalar_subquery(),
                 0,
             )
