@@ -1,0 +1,13 @@
+aiosqlite
+alembic
+asyncpg
+fastapi~=0.68.1
+graphene
+graphene-sqlalchemy
+gunicorn
+python-decouple
+scalecodec
+sqlalchemy
+substrate-interface
+tqdm
+uvicorn

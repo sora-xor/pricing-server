@@ -80,8 +80,8 @@ def process_events(dataset, func_map, result, grouped_events):
         extrinsic_events = grouped_events[extrinsic_idx]
         extrinsic_idx += 1
         exdict = extrinsic and extrinsic.value
-        if exdict and "call_function" in exdict.keys():
-            tx_type = exdict["call_function"]
+        if exdict and "call" in exdict.keys():
+            tx_type = exdict["call"]["call_function"]
             processing_func = func_map.get(tx_type)
             if processing_func:
                 tx = processing_func(timestamp, extrinsic_events, exdict)
@@ -178,7 +178,7 @@ async def update_volumes(session):
 
 
 def get_event_param(event, param_idx):
-    return event.value["params"][param_idx]["value"]
+    return event.value["event"]["attributes"][param_idx]["value"]
 
 
 async def async_main(async_session, begin=1, clean=False, silent=False):
