@@ -26,7 +26,7 @@ DEPOSITED = "Deposited"
 
 def get_fees_from_event(event) -> float:
     if event["event_id"] == "FeeWithdrawn":
-        return event["params"][1]["value"]
+        return event["event"]["attributes"][1]["value"]
     return 0
 
 
@@ -60,23 +60,23 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
         elif event["event_id"] == "ExtrinsicFailed":
             swap_success = False
         elif event["event_id"] == "Transfer":
-            src, dest, amount = event["params"]
+            src, dest, amount = event["event"]["attributes"]
             if dest["value"] == XOR_ACCOUNT:
                 xor_amount = amount["value"]
         elif event["event_id"] == "Endowed":
-            dest, amount = event["params"]
+            dest, amount = event["event"]["attributes"]
             if dest["value"] == XOR_ACCOUNT:
                 xor_amount = amount["value"]
         elif event["event_id"] == "Exchange":
-            input_amount = event["params"][4]["value"]
-            output_amount = event["params"][5]["value"]
-            swap_fee_amount = event["params"][6]["value"]
+            input_amount = event["event"]["attributes"][4]["value"]
+            output_amount = event["event"]["attributes"][5]["value"]
+            swap_fee_amount = event["event"]["attributes"][6]["value"]
         xor_fee = max(get_fees_from_event(event), xor_fee)
     if not swap_success:
         # TODO: add swap fail handler
         return None
 
-    for param in ex_dict["params"]:
+    for param in ex_dict["call"]["call_args"]:
         if param["name"] == "input_asset_id":
             input_asset_type = param["value"]
         elif param["name"] == "output_asset_id":
@@ -308,7 +308,7 @@ def process_batch_all(timestamp, extrinsicEvents, ex_dict):
 
 def get_timestamp(result) -> str:
     res = result["block"]["extrinsics"]
-    s = eval(str(res[0]))["params"][0]["value"]
+    s = res[0].value["call"]["call_args"][0]["value"]
     tms = s.split(".")
     ts = tms[0]
     ms = int(tms[1]) / 1000 if len(tms) > 1 else 0
