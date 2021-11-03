@@ -133,37 +133,45 @@ async def update_volumes(session):
     Update Pair.from_volume, Pair.to_volume and Token.trade_volume.
     """
     last_24h = (time() - 24 * 3600) * 1000
-    div = Decimal(10 ** 18)
-    await session.execute(
-        update(Token).values(
-            trade_volume=func.coalesce(
-                select(func.sum(Swap.from_amount) / div)
-                .join(Pair, Pair.id == Swap.pair_id)
-                .where(and_(Swap.timestamp > last_24h, Pair.from_token_id == Token.id))
-                .scalar_subquery(),
-                0,
-            )
-            + func.coalesce(
-                select(func.sum(Swap.to_amount) / div)
-                .join(Pair, Pair.id == Swap.pair_id)
-                .where(and_(Swap.timestamp > last_24h, Pair.to_token_id == Token.id))
-                .scalar_subquery(),
-                0,
-            )
-            + func.coalesce(
-                select(func.sum(Burn.amount) / div)
-                .where(and_(Burn.timestamp > last_24h, Burn.token_id == Token.id))
-                .scalar_subquery(),
-                0,
-            )
-            + func.coalesce(
-                select(func.sum(BuyBack.amount) / div)
-                .where(and_(BuyBack.timestamp > last_24h, BuyBack.token_id == Token.id))
-                .scalar_subquery(),
-                0,
-            )
-        )
+    from_amounts = session.execute(
+        select(Pair.from_token_id, func.sum(Swap.from_amount))
+        .where(Swap.timestamp > last_24h)
+        .join(Pair, Pair.id == Swap.pair_id)
+        .group_by(Pair.from_token_id)
     )
+    to_amounts = session.execute(
+        select(Pair.to_token_id, func.sum(Swap.to_amount))
+        .where(Swap.timestamp > last_24h)
+        .join(Pair, Pair.id == Swap.pair_id)
+        .group_by(Pair.to_token_id)
+    )
+    burn_amounts = session.execute(
+        select(Burn.token_id, func.sum(Burn.amount))
+        .where(Burn.timestamp > last_24h)
+        .group_by(Burn.token_id)
+    )
+    buyback_amounts = session.execute(
+        select(BuyBack.token_id, func.sum(BuyBack.amount))
+        .where(BuyBack.timestamp > last_24h)
+        .group_by(BuyBack.token_id)
+    )
+    tokens = session.execute(select(Token))
+    from_amounts = dict(list(await from_amounts))
+    to_amounts = dict(list(await to_amounts))
+    burn_amounts = dict(list(await burn_amounts))
+    buyback_amounts = dict(list(await buyback_amounts))
+    objects = []
+    for token in (await tokens).scalars().all():
+        volume = (
+            from_amounts.get(token.id, 0)
+            + to_amounts.get(token.id, 0)
+            + burn_amounts.get(token.id, 0)
+            + buyback_amounts.get(token.id, 0)
+        ) / Decimal(10 ** token.decimals)
+        token.trade_volume = volume
+        objects.append(token)
+    session.add_all(objects)
+    div = Decimal(10 ** 18)
     await session.execute(
         update(Pair).values(
             from_volume=select(func.sum(Swap.from_amount / div))
