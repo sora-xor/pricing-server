@@ -7,7 +7,7 @@ This tool imports history of swap transactions from Substrate node into relation
 
 1. Clone repository
 ```bash
-git clone https://github.com/yuriiz/pricing-server
+git clone https://github.com/sora-xor/pricing-server
 cd pricing-server/
 ```
 
@@ -33,9 +33,26 @@ http://localhost/graph - GraphQL API
 
 http://localhost/pairs/ - Pricing data of all pairs
 
-http://localhost/pairs/{BASE}-{QUOTE}- Pricing data for specific pair. For example: http://localhost/pairs/XOR-PSWAP/
+http://localhost/pairs/{BASE}-{QUOTE}- Pricing data for specific pair. For example: http://localhost/pairs/VAL-XOR/
 
 http://localhost/healthcheck - Healthcheck endpoint. Returns 200 OK. Can be used to check if web server is running and accepting connections.
+
+## Running tests
+
+```bash
+python -munittest  # in project directory
+```
+
+## Troubleshoot
+When certain block are not being processed or no blocks at all then most likely there is a missing or invalid type definition in the `custom_types.json`
+
+Use the `query.py` file. It can be run with:
+```bash
+cd harvester
+python -m pip install -r requirements.txt
+python query.py
+```
+
 
 ## System requirements
 

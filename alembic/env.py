@@ -1,7 +1,7 @@
 import asyncio
 from logging.config import fileConfig
 
-from models import Base, get_db_engine
+from models import Base
 
 from alembic import context
 
@@ -50,7 +50,9 @@ def run_migrations_offline():
 
 
 def do_run_migrations(connection):
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection, target_metadata=target_metadata, compare_type=True
+    )
 
     with context.begin_transaction():
         context.run_migrations()
@@ -63,7 +65,9 @@ async def run_migrations_online():
     and associate a connection with the context.
 
     """
-    async with get_db_engine().connect() as connection:
+    from db import engine
+
+    async with engine.connect() as connection:
         await connection.run_sync(do_run_migrations)
 
 

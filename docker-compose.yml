@@ -33,7 +33,7 @@ services:
         condition: service_started
       substrate:
         condition: service_healthy
-    command: "env SUBSTRATE_URL=ws://substrate:9944 DATABASE_URL=postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@postgres/${DB_NAME} python run_node_processing.py -f"
+    command: "env SUBSTRATE_URL=ws://substrate:9944 DATABASE_URL=postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@postgres/${DB_NAME} sh start.sh"
   web:
     build: .
     depends_on:

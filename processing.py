@@ -13,29 +13,26 @@ from data_models import (
     Withdraw,
 )
 
+XOR_ID = "0x0200000000000000000000000000000000000000000000000000000000000000"
+VAL_ID = "0x0200040000000000000000000000000000000000000000000000000000000000"
+PSWAP_ID = "0x0200050000000000000000000000000000000000000000000000000000000000"
+XOR_ACCOUNT = (
+    "0x54734f90f971a02c609b2d684e61b5574e35ac9942579a2635aada58e5d836a7"  # noqa
+)
 
-def event_params(exdict):
-    # Account id
-    if "account_id" in exdict.keys():
-        print("account_id", "0x" + exdict["account_id"])
-    # Extrinsic hash
-    if "extrinsic_hash" in exdict.keys():
-        print("tx hash", "0x" + exdict["extrinsic_hash"])
-
-
-def should_be_processed(exdict):
-    return "call_function" in exdict.keys()
+CURRENCIES = "Currencies"
+DEPOSITED = "Deposited"
 
 
 def get_fees_from_event(event) -> float:
     if event["event_id"] == "FeeWithdrawn":
-        return event["params"][1]["value"]
+        return event["event"]["attributes"][1]["value"]
     return 0
 
 
 def get_op_id(ex_dict) -> int:
     s = ex_dict["extrinsic_hash"]
-    return int(s, 16) % 255 ** 8
+    return int(s, 16)
 
 
 def is_extrinsic_success(event) -> bool:
@@ -55,20 +52,31 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
     xor_fee = 0
 
     filter_mode = None
+    xor_amount = None
 
     for event in extrinsicEvents:
         if event["event_id"] == "SwapSuccess":
             swap_success = True
+        elif event["event_id"] == "ExtrinsicFailed":
+            swap_success = False
+        elif event["event_id"] == "Transfer":
+            src, dest, amount = event["event"]["attributes"]
+            if dest["value"] == XOR_ACCOUNT:
+                xor_amount = amount["value"]
+        elif event["event_id"] == "Endowed":
+            dest, amount = event["event"]["attributes"]
+            if dest["value"] == XOR_ACCOUNT:
+                xor_amount = amount["value"]
         elif event["event_id"] == "Exchange":
-            input_amount = event["params"][4]["value"]
-            output_amount = event["params"][5]["value"]
-            swap_fee_amount = event["params"][6]["value"]
+            input_amount = event["event"]["attributes"][4]["value"]
+            output_amount = event["event"]["attributes"][5]["value"]
+            swap_fee_amount = event["event"]["attributes"][6]["value"]
         xor_fee = max(get_fees_from_event(event), xor_fee)
     if not swap_success:
         # TODO: add swap fail handler
         return None
 
-    for param in ex_dict["params"]:
+    for param in ex_dict["call"]["call_args"]:
         if param["name"] == "input_asset_id":
             input_asset_type = param["value"]
         elif param["name"] == "output_asset_id":
@@ -83,15 +91,10 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
                     "desired_amount_out"
                 ]
         elif param["name"] == "selected_source_types":
-            filter_mode = (
-                "SMART"
-                if len(param["value"]) < 1
-                else param["value"][0]
-                if len(param["value"]) == 1
-                else param["value"]
-            )
-            # TODO: handle filterMode here
+            filter_mode = param["value"] or ["SMART"]
 
+    if input_asset_type != XOR_ID and output_asset_type != XOR_ID:
+        assert xor_amount is not None, ex_dict
     return Swap(
         get_op_id(ex_dict),
         timestamp,
@@ -102,6 +105,7 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
         output_amount,
         filter_mode,
         swap_fee_amount,
+        xor_amount,
     )
 
 
@@ -304,7 +308,7 @@ def process_batch_all(timestamp, extrinsicEvents, ex_dict):
 
 def get_timestamp(result) -> str:
     res = result["block"]["extrinsics"]
-    s = eval(str(res[0]))["params"][0]["value"]
+    s = res[0].value["call"]["call_args"][0]["value"]
     tms = s.split(".")
     ts = tms[0]
     ms = int(tms[1]) / 1000 if len(tms) > 1 else 0
