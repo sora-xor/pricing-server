@@ -6,7 +6,11 @@ USER app
 
 WORKDIR /home/app
 
-ENV PATH="/home/app/.local/bin:${PATH}"
+ENV PATH="/home/app/.cargo/bin:/home/app/.local/bin:${PATH}"
+
+RUN curl https://sh.rustup.rs > /tmp/rustup-init && \
+    chmod +x /tmp/rustup-init && \
+    /tmp/rustup-init -y --default-toolchain nightly
 
 COPY --chown=app:app requirements.txt /home/app/requirements.txt
 RUN pip3 install --user -r requirements.txt
