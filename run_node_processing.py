@@ -308,7 +308,7 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                                 **tx
                             )
                         )
-                except:
+                except Exception as e:
                     logging.error(
                         "Failed to process transaction %s in block %i:", tx, block
                     )
