@@ -42,6 +42,21 @@ def connect_to_substrate_node():
         return None
 
 
+def connect_to_substrate_node_mst():
+    try:
+        substrate = SubstrateInterface(
+            url=decouple.config("SUBSTRATE_URL", "ws://127.0.0.1:9944"),
+            type_registry_preset="default",
+            type_registry=load_type_registry_file("custom_types_mst.json"),
+        )
+        return substrate
+    except ConnectionRefusedError:
+        logging.error(
+            "⚠️ No local Substrate node running, try running 'start_local_substrate_node.sh' first"  # noqa
+        )
+        return None
+
+
 def get_events_from_block(substrate, block_id: int):
     """
     Return events from block number <block_id> grouped by extrinsic_id.
@@ -192,9 +207,16 @@ def get_event_param(event, param_idx):
 async def async_main(async_session, begin=1, clean=False, silent=False):
     # get the number of last block in the chain
     substrate = connect_to_substrate_node()
-    end = substrate.get_runtime_block(substrate.get_chain_head())["block"]["header"][
-        "number"
-    ]
+    try:
+        end = substrate.get_runtime_block(substrate.get_chain_head())["block"]["header"][
+            "number"
+        ]
+    except:
+        substrate = connect_to_substrate_node_mst()
+        end = substrate.get_runtime_block(substrate.get_chain_head())["block"]["header"][
+            "number"
+        ]
+
     selected_events = {"swap"}
     func_map = {
         k: v for k, v in get_processing_functions().items() if k in selected_events
@@ -224,7 +246,12 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
         ):
             # get events from <block> to <dataset>
             dataset = []
-            events, res, grouped_events = get_events_from_block(substrate, block)
+            try:
+                events, res, grouped_events = get_events_from_block(substrate, block)
+            except:
+                substrate = connect_to_substrate_node_mst()
+                events, res, grouped_events = get_events_from_block(substrate, block)
+
             timestamp = get_timestamp(res)
             process_events(dataset, func_map, res, grouped_events)
             # await previous INSERT to finish if any
@@ -281,7 +308,7 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                                 **tx
                             )
                         )
-                except Exception as e:
+                except:
                     logging.error(
                         "Failed to process transaction %s in block %i:", tx, block
                     )
