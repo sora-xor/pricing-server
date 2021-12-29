@@ -216,6 +216,7 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
         end = substrate.get_runtime_block(substrate.get_chain_head())["block"]["header"][
             "number"
         ]
+        substrate = connect_to_substrate_node()
 
     selected_events = {"swap"}
     func_map = {
@@ -251,6 +252,7 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
             except:
                 substrate = connect_to_substrate_node_mst()
                 events, res, grouped_events = get_events_from_block(substrate, block)
+                substrate = connect_to_substrate_node()
 
             timestamp = get_timestamp(res)
             process_events(dataset, func_map, res, grouped_events)
