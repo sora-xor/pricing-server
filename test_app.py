@@ -117,6 +117,7 @@ class WebAppTest(DBTestCase):
             session.add(xor_dai)
             swap = Swap(
                 id=1,
+                txid=0x1234,
                 block=2,
                 timestamp=3,
                 pair=dai_xor,
@@ -128,6 +129,7 @@ class WebAppTest(DBTestCase):
             session.add(swap)
             swap = Swap(
                 id=2,
+                txid=0x5678,
                 block=4,
                 timestamp=5,
                 pair=dai_xor,
@@ -165,6 +167,7 @@ class WebAppTest(DBTestCase):
 
     @patch("web.get_whitelist")
     def test_pair_get(self, whitelist_mock):
+        self.maxDiff = 1024
         whitelist_mock.return_value = [{"address": "0x1"}, {"address": XOR_ID}]
         response = client.get("/pairs/DAI-XOR")
         assert response.status_code == 200, response.text
@@ -180,6 +183,8 @@ class WebAppTest(DBTestCase):
                 "quote_id": XOR_ID,
                 "quote_name": "X",
                 "quote_symbol": "XOR",
+                "last_block": 4,
+                "last_txid": "0x0000000000000000000000000000000000000000000000000000000000005678",
                 "quote_volume": 6,
             },
         )

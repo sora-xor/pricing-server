@@ -248,6 +248,10 @@ class PairResponse(BaseModel):
     )
     quote_name: str = Field("SORA")
     quote_symbol: str = Field(example="XOR")
+    last_txid: str = Field(
+        example="0x1234000000000000000000000000000000000000000000000000000000000000"
+    )
+    last_block: int = Field(example=100)
     last_price: float = Field(example=12.34)
     base_volume: float = Field(example=5.6)
     quote_volume: float = Field(example=7.8)
@@ -312,6 +316,8 @@ async def pair(base: str, quote: str, session=Depends(get_db)):
         "quote_id": quote.hash,
         "quote_name": quote.name,
         "quote_symbol": quote.symbol,
+        "last_block": last_swap.block,
+        "last_txid": last_swap.hash,
         "last_price": last_swap.to_amount / last_swap.from_amount
         if last_swap.pair_id == pair.id
         else last_swap.from_amount / last_swap.to_amount,
