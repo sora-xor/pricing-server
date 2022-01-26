@@ -5,10 +5,10 @@ from substrateinterface import SubstrateInterface
 substrate = SubstrateInterface(
     url='wss://mof2.sora.org/',
     type_registry_preset='default',
-    type_registry=load_type_registry_file('./custom_types_mst.json'),
+    type_registry=load_type_registry_file('./custom_types.json'),
 )
 
-block_hash = substrate.get_block_hash(block_id=3087806)
+block_hash = substrate.get_block_hash(block_id=3554113)
 
 extrinsics = substrate.get_block(block_hash=block_hash)['extrinsics']
 
