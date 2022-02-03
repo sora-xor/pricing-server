@@ -10,7 +10,7 @@ ENV PATH="/home/app/.local/bin:${PATH}"
 
 COPY --chown=app:app requirements.txt /home/app/requirements.txt
 
-RUN pip3 install --user -r requirements.txt && pip3 install --user gunicorn
+RUN pip3 install --user -r requirements.txt
 
 COPY --chown=app:app *.py /home/app/
 
