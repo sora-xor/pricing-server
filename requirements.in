@@ -11,4 +11,3 @@ sqlalchemy
 substrate-interface
 tqdm
 uvicorn
-gunicorn
