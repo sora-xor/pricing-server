@@ -1,5 +1,5 @@
 {
-  "runtime_id": 21,
+  "runtime_id": 23,
   "versioning": [
     {
       "runtime_range": [
@@ -1670,7 +1670,7 @@
           ]
         },
         "ValidationFunction": "Null",
-        "BTreeMap<RewardReason,Balance>": "Vec<(RewardReason,Balance)>",
+        "BTreeMap<RewardReason,Balance> ": "Vec<(RewardReason,Balance)>",
         "BTreeSet<SignatureParams>": "Vec<SignatureParams>",
         "BTreeSet<H256>": "Vec<H256>",
         "BTreeSet<AssetId>": "Vec<AssetId>",
