@@ -1670,7 +1670,8 @@
           ]
         },
         "ValidationFunction": "Null",
-        "BTreeMap<RewardReason,Balance> ": "Vec<(RewardReason,Balance)>",
+        "Timepoint": "BridgeTimepoint",
+        "BTreeMap<RewardReason,Balance>": "Vec<(RewardReason,Balance)>",
         "BTreeSet<SignatureParams>": "Vec<SignatureParams>",
         "BTreeSet<H256>": "Vec<H256>",
         "BTreeSet<AssetId>": "Vec<AssetId>",
@@ -1723,6 +1724,7 @@
       2829626,
       19
     ],
-    [3859200, 22]
+    [3859200, 22],
+    [3939851, 23]
   ]
 }
