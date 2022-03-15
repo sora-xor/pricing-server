@@ -46,7 +46,12 @@ python -munittest  # in project directory
 ## Troubleshoot
 When certain block are not being processed or no blocks at all then most likely there is a missing or invalid type definition in the `custom_types.json`
 
-Use the `query.py` file. It can be run with:
+Use `update_custom_types.py` to update `custom_types.json`
+```bash
+python update_custom_types.py
+```
+
+Also, you can use the `query.py` file to debug type errors. It can be run with:
 ```bash
 cd harvester
 python -m pip install -r requirements.txt
