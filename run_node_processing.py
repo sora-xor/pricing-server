@@ -66,7 +66,7 @@ def get_events_from_block(substrate, block_id: int):
 
     # Retrieve extrinsics in block
     result = substrate.get_runtime_block(
-        block_hash=block_hash, ignore_decoding_errors=True
+        block_hash=block_hash
     )
     events = substrate.get_events(block_hash)
 
@@ -112,7 +112,8 @@ async def get_or_create_token(substrate, session, id: int) -> Token:
     for a in assets:
         if int(a["asset_id"], 16) == id:
             a = Token(
-                id=id, name=a["name"], symbol=a["symbol"], decimals=int(a["precision"])
+                id=id, name=a["name"], symbol=a["symbol"], decimals=int(
+                    a["precision"])
             )
             session.add(a)
             await session.commit()
@@ -137,7 +138,8 @@ async def get_or_create_pair(
 async def get_all_pairs(session):
     pairs = {}
     for (p,) in await session.execute(
-        select(Pair).options(selectinload(Pair.from_token), selectinload(Pair.to_token))
+        select(Pair).options(selectinload(
+            Pair.from_token), selectinload(Pair.to_token))
     ):
         pairs[p.from_token.id, p.to_token.id] = p
     return pairs
@@ -248,10 +250,12 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
             # get events from <block> to <dataset>
             dataset = []
             try:
-                events, res, grouped_events = get_events_from_block(substrate, block)
+                events, res, grouped_events = get_events_from_block(
+                    substrate, block)
             except:
                 substrate = connect_to_substrate_node_mst()
-                events, res, grouped_events = get_events_from_block(substrate, block)
+                events, res, grouped_events = get_events_from_block(
+                    substrate, block)
                 substrate = connect_to_substrate_node()
 
             timestamp = get_timestamp(res)
@@ -493,4 +497,5 @@ if __name__ == "__main__":
         # then import again in a loop
         asyncio.run(async_main_loop(async_session, args))
     else:
-        asyncio.run(async_main(async_session, args.begin, args.clean, args.silent))
+        asyncio.run(async_main(async_session,
+                    args.begin, args.clean, args.silent))
