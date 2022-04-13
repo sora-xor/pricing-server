@@ -18,7 +18,7 @@ VAL_ID = "0x0200040000000000000000000000000000000000000000000000000000000000"
 PSWAP_ID = "0x0200050000000000000000000000000000000000000000000000000000000000"
 XOR_ACCOUNT = (
     #"0x54734f90f971a02c609b2d684e61b5574e35ac9942579a2635aada58e5d836a7"  # noqa
-    "cnTQ1kbv7PBNNQrEb1tZpmK7ftiv4yCCpUQy1J2y7Y54Taiaw" #noqa
+    "cnTQ1kbv7PBNNQrEb1tZpmK7ftiv4yCCpUQy1J2y7Y54Taiaw"  # noqa
 )
 
 CURRENCIES = "Currencies"
@@ -38,6 +38,13 @@ def get_op_id(ex_dict) -> int:
 
 def is_extrinsic_success(event) -> bool:
     return event["event_id"] == "ExtrinsicSuccess"
+
+
+def set_xor_amount(value, current_value):
+    if current_value is None or value > current_value:
+        return value
+    else:
+        return current_value
 
 
 def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
@@ -60,10 +67,8 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
             swap_success = True
         elif event["event_id"] == "ExtrinsicFailed":
             swap_success = False
-        elif event["event_id"] == "Endowed":
-            dest, amount = event["event"]["attributes"]
-            if dest["value"] == XOR_ACCOUNT:
-                xor_amount = amount["value"]
+        elif event['event_id'] == 'Transfer' and event['attributes'][0]['value'] == XOR_ACCOUNT:
+            xor_amount = set_xor_amount(event['attributes'][2]['value'], xor_amount)
         elif event["event_id"] == "Exchange":
             input_amount = event["event"]["attributes"][4]["value"]
             output_amount = event["event"]["attributes"][5]["value"]
