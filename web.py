@@ -28,7 +28,8 @@ def get_whitelist():
     """
     KEY = "whitelist"
     if KEY not in __cache or __cache[KEY]["updated"] < time() - 24 * 3600:
-        __cache[KEY] = {"data": requests.get(WHITELIST_URL).json(), "updated": time()}
+        __cache[KEY] = {"data": requests.get(
+            WHITELIST_URL).json(), "updated": time()}
     return __cache["whitelist"]["data"]
 
 
@@ -198,6 +199,9 @@ async def pairs(session=Depends(get_db)):
             base_volume = p.to_volume
             quote = p.from_token
             quote_volume = p.from_volume
+            quote_price = p.quote_price
+            if quote_price:
+                quote_price = 1 / quote_price
             if last_price:
                 # reverse price
                 last_price = 1 / last_price
@@ -209,6 +213,7 @@ async def pairs(session=Depends(get_db)):
             base_volume = p.from_volume
             quote = p.to_token
             quote_volume = p.to_volume
+            quote_price = p.quote_price
         # quote is always XOR
         id = base.hash + "_" + quote.hash
         if id in pairs:
@@ -225,7 +230,7 @@ async def pairs(session=Depends(get_db)):
                 "quote_id": quote.hash,
                 "quote_name": quote.name,
                 "quote_symbol": quote.symbol,
-                "last_price": last_price,
+                "last_price": quote_price or last_price,
                 "base_volume": base_volume or 0,
                 "quote_volume": quote_volume or 0,
             }
@@ -265,7 +270,8 @@ async def pair(base: str, quote: str, session=Depends(get_db)):
     # get pair and its tokens info
     from_token = Token.__table__.alias("from_token")
     to_token = Token.__table__.alias("to_token")
-    whitelist = [Decimal(int(token["address"], 16)) for token in get_whitelist()]
+    whitelist = [Decimal(int(token["address"], 16))
+                 for token in get_whitelist()]
     # get volume of base->quote swaps
     pair = await session.execute(
         select(Pair)
@@ -309,6 +315,12 @@ async def pair(base: str, quote: str, session=Depends(get_db)):
             .limit(1)
         )
     ).scalar()
+    if pair.quote_price:
+        last_price = pair.quote_price
+    elif last_swap.pair_id == pair.id:
+        last_price = last_swap.to_amount / last_swap.from_amount
+    else:
+        last_price = last_swap.from_amount / last_swap.to_amount
     return {
         "base_id": base.hash,
         "base_name": base.name,
@@ -318,9 +330,7 @@ async def pair(base: str, quote: str, session=Depends(get_db)):
         "quote_symbol": quote.symbol,
         "last_block": last_swap.block,
         "last_txid": last_swap.hash,
-        "last_price": last_swap.to_amount / last_swap.from_amount
-        if last_swap.pair_id == pair.id
-        else last_swap.from_amount / last_swap.to_amount,
+        "last_price": last_price,
         "base_volume": base_volume,
         "quote_volume": quote_volume,
     }

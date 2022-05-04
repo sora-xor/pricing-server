@@ -35,6 +35,7 @@ class Pair(Base):
         foreign_keys=[to_token_id],
         backref=backref("to_pairs", uselist=True, cascade="delete,all"),
     )
+    quote_price = Column(Numeric(), nullable=True)
 
 
 class Swap(Base):

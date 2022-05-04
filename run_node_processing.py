@@ -12,6 +12,7 @@ from scalecodec.type_registry import load_type_registry_file
 from sqlalchemy import and_, func, update
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
+import substrateinterface
 from substrateinterface import SubstrateInterface
 from tqdm import trange
 
@@ -26,6 +27,10 @@ from processing import (
     get_timestamp,
 )
 
+# Enable logging of RPC requests
+# substrateinterface.logger.setLevel(logging.DEBUG)
+
+DENOM = Decimal(10 ** 18)
 
 def connect_to_substrate_node():
     try:
@@ -81,7 +86,7 @@ def get_events_from_block(substrate, block_id: int):
             grouped_events[idx].append(eventdict)
         else:
             grouped_events[idx] = [eventdict]
-    return events, result, grouped_events
+    return block_hash, events, result, grouped_events
 
 
 def process_events(dataset, func_map, result, grouped_events):
@@ -188,13 +193,12 @@ async def update_volumes(session):
         token.trade_volume = volume
         objects.append(token)
     session.add_all(objects)
-    div = Decimal(10 ** 18)
     await session.execute(
         update(Pair).values(
-            from_volume=select(func.sum(Swap.from_amount / div))
+            from_volume=select(func.sum(Swap.from_amount / DENOM))
             .where(and_(Swap.pair_id == Pair.id, Swap.timestamp > last_24h))
             .scalar_subquery(),
-            to_volume=select(func.sum(Swap.to_amount / div))
+            to_volume=select(func.sum(Swap.to_amount / DENOM))
             .where(and_(Swap.pair_id == Pair.id, Swap.timestamp > last_24h))
             .scalar_subquery(),
         )
@@ -207,17 +211,18 @@ def get_event_param(event, param_idx):
 
 
 async def async_main(async_session, begin=1, clean=False, silent=False):
+    def get_end(substrate: SubstrateInterface):
+        block_hash = substrate.get_chain_finalised_head()
+        block = substrate.get_runtime_block(block_hash)
+        return block["block"]["header"]["number"]
+
     # get the number of last block in the chain
     substrate = connect_to_substrate_node()
     try:
-        end = substrate.get_runtime_block(substrate.get_chain_head())["block"]["header"][
-            "number"
-        ]
+        end = get_end(substrate)
     except:
         substrate = connect_to_substrate_node_mst()
-        end = substrate.get_runtime_block(substrate.get_chain_head())["block"]["header"][
-            "number"
-        ]
+        end = get_end(substrate)
         substrate = connect_to_substrate_node()
 
     selected_events = {"swap"}
@@ -250,11 +255,11 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
             # get events from <block> to <dataset>
             dataset = []
             try:
-                events, res, grouped_events = get_events_from_block(
+                block_hash, events, res, grouped_events = get_events_from_block(
                     substrate, block)
             except:
                 substrate = connect_to_substrate_node_mst()
-                events, res, grouped_events = get_events_from_block(
+                block_hash, events, res, grouped_events = get_events_from_block(
                     substrate, block)
                 substrate = connect_to_substrate_node()
 
@@ -307,11 +312,15 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                             )
                         ).id
                         swaps.append(
-                            Swap(
-                                block=block,
-                                from_amount=from_amount,
-                                to_amount=to_amount,
-                                **tx
+                            (
+                                from_asset,
+                                to_asset,
+                                Swap(
+                                    block=block,
+                                    from_amount=from_amount,
+                                    to_amount=to_amount,
+                                    **tx
+                                )
                             )
                         )
                 except Exception as e:
@@ -437,6 +446,16 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                                             amount=val_reminted_parliament,
                                         )
                                     )
+            for i, swap in enumerate(swaps):
+                other_asset = swap[0] if swap[1] == xor_id_int else swap[1]
+                other_asset = '{0:#0{1}x}'.format(other_asset, 66)
+                params = [0, XOR_ID, other_asset, '1000000000000000000', 'WithDesiredInput', [], 'Disabled', block_hash]
+                result = substrate.rpc_request('liquidityProxy_quote', params)
+                pair = pairs[swap[0], swap[1]]
+                amount = int(result['result']['amount']) / DENOM
+                pair.quote_price = amount if swap[0] == xor_id_int else 1 / amount
+                session.add(pair)
+                swaps[i] = swap[2]
             if swaps or burns:
                 # save instances to DB
                 if swaps:
