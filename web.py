@@ -174,9 +174,11 @@ async def root():
         </ul>
         """
 
+
 class FormattedFloat(float):
     def __repr__(self):
         return '{:.18f}'.format(self).rstrip('0')
+
 
 class JsonFloatEncoder(json.JSONEncoder):
     def encode(self, val):
@@ -191,18 +193,20 @@ class JsonFloatEncoder(json.JSONEncoder):
 
         return val
 
+
 class FormattedJSONResponse(JSONResponse):
     media_type = "application/json"
 
     def render(self, content: typing.Any) -> bytes:
         return json.dumps(
             str(content).replace("'", "\""),
-            cls = JsonFloatEncoder,
+            cls=JsonFloatEncoder,
             ensure_ascii=False,
             allow_nan=False,
             indent=None,
             separators=(",", ":"),
         ).encode("utf-8")
+
 
 @app.get("/pairs/")
 async def pairs(session=Depends(get_db)):
@@ -251,9 +255,9 @@ async def pairs(session=Depends(get_db)):
         if id in pairs:
             # sum up buying and sellling volumes
             if base_volume:
-                pairs[id]["base_volume"] += base_volume
+                pairs[id]["base_volume"] += FormattedFloat(base_volume)
             if quote_volume:
-                pairs[id]["quote_volume"] += quote_volume
+                pairs[id]["quote_volume"] += FormattedFloat(quote_volume)
         else:
             pairs[id] = {
                 "base_id": base.hash,
@@ -267,6 +271,7 @@ async def pairs(session=Depends(get_db)):
                 "quote_volume": FormattedFloat(quote_volume or 0) or 0,
             }
     return FormattedJSONResponse(pairs)
+
 
 @app.get("/pairs/{base}-{quote}/")
 async def pair(base: str, quote: str, session=Depends(get_db)):
