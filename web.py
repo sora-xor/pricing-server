@@ -1,6 +1,8 @@
 from decimal import Decimal
 from time import time
 
+import json
+import typing
 import graphene
 import requests
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -13,6 +15,7 @@ from sqlalchemy import and_, desc, or_
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from starlette.graphql import GraphQLApp
+from starlette.responses import JSONResponse
 
 from models import Burn, BuyBack, Pair, Swap, Token
 from processing import XOR_ID
@@ -175,6 +178,32 @@ class FormattedFloat(float):
     def __repr__(self):
         return '{:.18f}'.format(self).rstrip('0')
 
+class JsonFloatEncoder(json.JSONEncoder):
+    def encode(self, val):
+        if isinstance(val, dict):
+            return {k: self.encode(v) for k, v in val.items()}
+
+        if isinstance(val, (list, tuple)):
+            return type(val)(self.encode(v) for v in val)
+
+        if isinstance(val, float):
+            return FormattedFloat(val)
+
+        return val
+
+class FormattedJSONResponse(JSONResponse):
+    media_type = "application/json"
+
+    def render(self, content: typing.Any) -> bytes:
+        return json.dumps(
+            str(content).replace("'", "\""),
+            cls = JsonFloatEncoder,
+            ensure_ascii=False,
+            allow_nan=False,
+            indent=None,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
 @app.get("/pairs/")
 async def pairs(session=Depends(get_db)):
     """
@@ -237,7 +266,7 @@ async def pairs(session=Depends(get_db)):
                 "base_volume": FormattedFloat(base_volume or 0) or 0,
                 "quote_volume": FormattedFloat(quote_volume or 0) or 0,
             }
-    return str(pairs)
+    return FormattedJSONResponse(pairs)
 
 @app.get("/pairs/{base}-{quote}/")
 async def pair(base: str, quote: str, session=Depends(get_db)):
@@ -298,7 +327,7 @@ async def pair(base: str, quote: str, session=Depends(get_db)):
         last_price = last_swap.to_amount / last_swap.from_amount
     else:
         last_price = last_swap.from_amount / last_swap.to_amount
-    return str({
+    return FormattedJSONResponse({
         "base_id": base.hash,
         "base_name": base.name,
         "base_symbol": base.symbol,
