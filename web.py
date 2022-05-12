@@ -177,7 +177,7 @@ async def root():
 
 class FormattedFloat(float):
     def __repr__(self):
-        return '{:.18f}'.format(self).rstrip('0')
+        return '{:.18f}'.format(self).rstrip('.0')
 
 
 class JsonFloatEncoder(json.JSONEncoder):
