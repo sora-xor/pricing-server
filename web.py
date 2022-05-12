@@ -199,7 +199,7 @@ class FormattedJSONResponse(JSONResponse):
 
     def render(self, content: typing.Any) -> bytes:
         return json.dumps(
-            str(content).replace("'", "\""),
+            str(content).replace("'", "\"").replace(", ", ",").replace(": ", ":"),
             cls=JsonFloatEncoder,
             ensure_ascii=False,
             allow_nan=False,
