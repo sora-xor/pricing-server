@@ -171,6 +171,9 @@ async def root():
         </ul>
         """
 
+class FormattedFloat(float):
+    def __repr__(self):
+        return '{:.18f}'.format(self).rstrip('0')
 
 @app.get("/pairs/")
 async def pairs(session=Depends(get_db)):
@@ -230,39 +233,13 @@ async def pairs(session=Depends(get_db)):
                 "quote_id": quote.hash,
                 "quote_name": quote.name,
                 "quote_symbol": quote.symbol,
-                "last_price": quote_price or last_price,
-                "base_volume": base_volume or 0,
-                "quote_volume": quote_volume or 0,
+                "last_price": FormattedFloat(quote_price or last_price),
+                "base_volume": FormattedFloat(base_volume or 0) or 0,
+                "quote_volume": FormattedFloat(quote_volume or 0) or 0,
             }
-    return pairs
+    return str(pairs)
 
-
-class PairResponse(BaseModel):
-    """
-    Definition of specific pair endpoint response format.
-    Used to generate docs.
-    """
-
-    base_id: str = Field(
-        "0x0200040000000000000000000000000000000000000000000000000000000000"
-    )
-    base_name: str = Field("SORA Validator Token")
-    base_symbol: str = Field("VAL")
-    quote_id: str = Field(
-        "0x0200000000000000000000000000000000000000000000000000000000000000"
-    )
-    quote_name: str = Field("SORA")
-    quote_symbol: str = Field(example="XOR")
-    last_txid: str = Field(
-        example="0x1234000000000000000000000000000000000000000000000000000000000000"
-    )
-    last_block: int = Field(example=100)
-    last_price: float = Field(example=12.34)
-    base_volume: float = Field(example=5.6)
-    quote_volume: float = Field(example=7.8)
-
-
-@app.get("/pairs/{base}-{quote}/", response_model=PairResponse)
+@app.get("/pairs/{base}-{quote}/")
 async def pair(base: str, quote: str, session=Depends(get_db)):
     """
     Return pricing and volume information on specific pair.
@@ -321,7 +298,7 @@ async def pair(base: str, quote: str, session=Depends(get_db)):
         last_price = last_swap.to_amount / last_swap.from_amount
     else:
         last_price = last_swap.from_amount / last_swap.to_amount
-    return {
+    return str({
         "base_id": base.hash,
         "base_name": base.name,
         "base_symbol": base.symbol,
@@ -330,10 +307,10 @@ async def pair(base: str, quote: str, session=Depends(get_db)):
         "quote_symbol": quote.symbol,
         "last_block": last_swap.block,
         "last_txid": last_swap.hash,
-        "last_price": last_price,
-        "base_volume": base_volume,
-        "quote_volume": quote_volume,
-    }
+        "last_price": FormattedFloat(last_price),
+        "base_volume": FormattedFloat(base_volume) or 0,
+        "quote_volume": FormattedFloat(quote_volume) or 0,
+    })
 
 
 @app.get("/graph")
