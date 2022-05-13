@@ -177,7 +177,7 @@ async def root():
 
 class FormattedFloat(float):
     def __repr__(self):
-        return '{:.18f}'.format(self).rstrip('.0')
+        return '{:.18f}'.format(self).rstrip('0').rstrip('.')
 
 
 class JsonFloatEncoder(json.JSONEncoder):
@@ -267,8 +267,8 @@ async def pairs(session=Depends(get_db)):
                 "quote_name": quote.name,
                 "quote_symbol": quote.symbol,
                 "last_price": FormattedFloat(quote_price or last_price),
-                "base_volume": FormattedFloat(base_volume or 0) or 0,
-                "quote_volume": FormattedFloat(quote_volume or 0) or 0,
+                "base_volume": FormattedFloat(base_volume or 0),
+                "quote_volume": FormattedFloat(quote_volume or 0),
             }
     return FormattedJSONResponse(pairs)
 
@@ -342,8 +342,8 @@ async def pair(base: str, quote: str, session=Depends(get_db)):
         "last_block": last_swap.block,
         "last_txid": last_swap.hash,
         "last_price": FormattedFloat(last_price),
-        "base_volume": FormattedFloat(base_volume) or 0,
-        "quote_volume": FormattedFloat(quote_volume) or 0,
+        "base_volume": FormattedFloat(base_volume),
+        "quote_volume": FormattedFloat(quote_volume),
     })
 
 
