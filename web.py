@@ -177,6 +177,7 @@ async def root():
 
 class FormattedFloat(float):
     def __repr__(self):
+        # remove redundant 0 after formatting and then remove . if it is integer number
         return '{:.18f}'.format(self).rstrip('0').rstrip('.')
 
 
