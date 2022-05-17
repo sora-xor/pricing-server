@@ -1,6 +1,8 @@
 from decimal import Decimal
 from time import time
 
+import json
+import typing
 import graphene
 import requests
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -13,6 +15,7 @@ from sqlalchemy import and_, desc, or_
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from starlette.graphql import GraphQLApp
+from starlette.responses import JSONResponse
 
 from models import Burn, BuyBack, Pair, Swap, Token
 from processing import XOR_ID
@@ -172,6 +175,40 @@ async def root():
         """
 
 
+class FormattedFloat(float):
+    def __repr__(self):
+        # remove redundant 0 after formatting and then remove . if it is integer number
+        return '{:.18f}'.format(self).rstrip('0').rstrip('.')
+
+
+class JsonFloatEncoder(json.JSONEncoder):
+    def encode(self, val):
+        if isinstance(val, dict):
+            return {k: self.encode(v) for k, v in val.items()}
+
+        if isinstance(val, (list, tuple)):
+            return type(val)(self.encode(v) for v in val)
+
+        if isinstance(val, float):
+            return FormattedFloat(val)
+
+        return val
+
+
+class FormattedJSONResponse(JSONResponse):
+    media_type = "application/json"
+
+    def render(self, content: typing.Any) -> bytes:
+        return json.dumps(
+            str(content).replace("'", "\"").replace(", ", ",").replace(": ", ":"),
+            cls=JsonFloatEncoder,
+            ensure_ascii=False,
+            allow_nan=False,
+            indent=None,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+
 @app.get("/pairs/")
 async def pairs(session=Depends(get_db)):
     """
@@ -219,9 +256,9 @@ async def pairs(session=Depends(get_db)):
         if id in pairs:
             # sum up buying and sellling volumes
             if base_volume:
-                pairs[id]["base_volume"] += base_volume
+                pairs[id]["base_volume"] += FormattedFloat(base_volume)
             if quote_volume:
-                pairs[id]["quote_volume"] += quote_volume
+                pairs[id]["quote_volume"] += FormattedFloat(quote_volume)
         else:
             pairs[id] = {
                 "base_id": base.hash,
@@ -230,39 +267,14 @@ async def pairs(session=Depends(get_db)):
                 "quote_id": quote.hash,
                 "quote_name": quote.name,
                 "quote_symbol": quote.symbol,
-                "last_price": quote_price or last_price,
-                "base_volume": base_volume or 0,
-                "quote_volume": quote_volume or 0,
+                "last_price": FormattedFloat(quote_price or last_price),
+                "base_volume": FormattedFloat(base_volume or 0),
+                "quote_volume": FormattedFloat(quote_volume or 0),
             }
-    return pairs
+    return FormattedJSONResponse(pairs)
 
 
-class PairResponse(BaseModel):
-    """
-    Definition of specific pair endpoint response format.
-    Used to generate docs.
-    """
-
-    base_id: str = Field(
-        "0x0200040000000000000000000000000000000000000000000000000000000000"
-    )
-    base_name: str = Field("SORA Validator Token")
-    base_symbol: str = Field("VAL")
-    quote_id: str = Field(
-        "0x0200000000000000000000000000000000000000000000000000000000000000"
-    )
-    quote_name: str = Field("SORA")
-    quote_symbol: str = Field(example="XOR")
-    last_txid: str = Field(
-        example="0x1234000000000000000000000000000000000000000000000000000000000000"
-    )
-    last_block: int = Field(example=100)
-    last_price: float = Field(example=12.34)
-    base_volume: float = Field(example=5.6)
-    quote_volume: float = Field(example=7.8)
-
-
-@app.get("/pairs/{base}-{quote}/", response_model=PairResponse)
+@app.get("/pairs/{base}-{quote}/")
 async def pair(base: str, quote: str, session=Depends(get_db)):
     """
     Return pricing and volume information on specific pair.
@@ -321,7 +333,7 @@ async def pair(base: str, quote: str, session=Depends(get_db)):
         last_price = last_swap.to_amount / last_swap.from_amount
     else:
         last_price = last_swap.from_amount / last_swap.to_amount
-    return {
+    return FormattedJSONResponse({
         "base_id": base.hash,
         "base_name": base.name,
         "base_symbol": base.symbol,
@@ -330,10 +342,10 @@ async def pair(base: str, quote: str, session=Depends(get_db)):
         "quote_symbol": quote.symbol,
         "last_block": last_swap.block,
         "last_txid": last_swap.hash,
-        "last_price": last_price,
-        "base_volume": base_volume,
-        "quote_volume": quote_volume,
-    }
+        "last_price": FormattedFloat(last_price),
+        "base_volume": FormattedFloat(base_volume),
+        "quote_volume": FormattedFloat(quote_volume),
+    })
 
 
 @app.get("/graph")
