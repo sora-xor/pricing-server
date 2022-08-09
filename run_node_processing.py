@@ -31,7 +31,7 @@ from processing import (
 # substrateinterface.logger.setLevel(logging.DEBUG)
 
 DENOM = Decimal(10 ** 18)
-BLOCK_IMPORT_LIMIT = 10000
+BLOCK_IMPORT_LIMIT = 100
 
 def connect_to_substrate_node():
     try:
