@@ -471,7 +471,7 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                 if burns:
                     session.add_all(burns)
                     session.add_all(buybacks)
-                logging.info('Committing for {}'.format(block))
+                logging.info('Committing for {} block'.format(block))
                 pending = session.commit()
         # wait for pending DB commit to finish
         if pending:
