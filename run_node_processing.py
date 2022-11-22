@@ -31,7 +31,6 @@ from processing import (
 # substrateinterface.logger.setLevel(logging.DEBUG)
 
 DENOM = Decimal(10 ** 18)
-BLOCK_IMPORT_LIMIT = 3
 
 def connect_to_substrate_node():
     try:
@@ -233,8 +232,6 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
     xor_id_int = int(XOR_ID, 16)
     val_id_int = int(VAL_ID, 16)
     pswap_id_int = int(PSWAP_ID, 16)
-    # If all blocks are imported the main loop is delayed, otherwise it starts the function immediately.
-    blocks_imported = True
     async with async_session() as session:
         # cache list of pairs in memory
         # to avoid SELECTing them everytime there is need to lookup ID by hash
@@ -243,11 +240,6 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
         last = (await session.execute(func.max(Swap.block))).scalar()
         if last:
             begin = last + 1
-        limited_end = begin + BLOCK_IMPORT_LIMIT
-        if end > limited_end:
-            end = limited_end
-            blocks_imported = False
-            
         # sync from last block in the DB to last block in the chain
         pending = None
         if not silent:
@@ -478,7 +470,6 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
         if not silent:
             logging.info("Updating trade volumes...")
         await update_volumes(session)
-    blocks_imported
 
 
 async def async_main_loop(async_session, args):
@@ -486,9 +477,7 @@ async def async_main_loop(async_session, args):
     Run import in an infinite loop.
     """
     while True:
-        blocks_imported = False
-        while not blocks_imported:
-            blocks_imported = await async_main(async_session, args.begin, args.clean, args.silent)
+        await async_main(async_session, args.begin, args.clean, args.silent)
         if not args.silent:
             logging.info("Waiting for new blocks...")
         await asyncio.sleep(decouple.config("POLL_INTERVAL", default=600, cast=int))
