@@ -315,11 +315,8 @@ def process_batch_all(timestamp, extrinsicEvents, ex_dict):
 
 def get_timestamp(result) -> str:
     res = result["block"]["extrinsics"]
-    s = res[0].value["call"]["call_args"][0]["value"]
-    tms = s.split(".")
-    ts = tms[0]
-    ms = int(tms[1]) / 1000 if len(tms) > 1 else 0
-    return int(datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S").timestamp()) * 1000 + ms
+    ts = res[0].value["call"]["call_args"][0]["value"]
+    return ts
 
 
 def get_processing_functions() -> Dict[
