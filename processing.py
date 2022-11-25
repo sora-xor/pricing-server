@@ -318,10 +318,19 @@ def get_timestamp(result) -> str:
     res = result["block"]["extrinsics"]
     s = res[0].value["call"]["call_args"][0]["value"]
     logging.info(">>> Get timestamp: %s", s)
-    tms = s.split(".")
-    ts = tms[0]
-    ms = int(tms[1]) / 1000 if len(tms) > 1 else 0
-    return int(datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S").timestamp()) * 1000 + ms
+    timestamp = ""
+    if isinstance(s, int):
+        logging.info(">>> it is int")
+        timestamp = s
+    else:
+        logging.info(">>> it is string")
+        tms = s.split(".")
+        ts = tms[0]
+        ms = int(tms[1]) / 1000 if len(tms) > 1 else 0
+        timestamp = int(datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S").timestamp()) * 1000 + ms
+    
+    logging.info(">>> Return timestamp: %s", timestamp)
+    return timestamp
 
 
 def get_processing_functions() -> Dict[
