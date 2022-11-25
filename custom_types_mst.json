@@ -2720,15 +2720,7 @@
                             "Balance"
                         ]
                     ]
-                }
-            }
-        },
-        {
-            "runtime_range": [
-                35,
-                null
-            ],
-            "types": {
+                },
                 "LiquiditySourceIdOf": {
                     "type": "struct",
                     "type_mapping": [
@@ -2741,7 +2733,15 @@
                             "LiquiditySourceType"
                         ]
                     ]
-                },
+                }
+            }
+        },
+        {
+            "runtime_range": [
+                37,
+                null
+            ],
+            "types": {
                 "ContributorsVesting": {
                     "type": "struct",
                     "type_mapping": [
@@ -2934,59 +2934,5 @@
                 }
             }
         }
-    ],
-    "runtime_upgrades": [
-        [
-            0,
-            1
-        ],
-        [
-            489600,
-            3
-        ],
-        [
-            616533,
-            4
-        ],
-        [
-            1243341,
-            7
-        ],
-        [
-            1403659,
-            8
-        ],
-        [
-            1744716,
-            9
-        ],
-        [
-            2829626,
-            19
-        ],
-        [
-            3859200,
-            22
-        ],
-        [
-            3939851,
-            23
-        ],
-        [
-            4470062,
-            26
-        ],
-        [
-            4652184,
-            29
-        ],
-        [
-            4710795,
-            30
-        ],
-        [
-            5293842,
-            33
-        ]
     ]
 }
