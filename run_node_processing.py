@@ -240,7 +240,6 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
         last = (await session.execute(func.max(Swap.block))).scalar()
         if last:
             begin = last + 1
-            
         # sync from last block in the DB to last block in the chain
         pending = None
         if not silent:
