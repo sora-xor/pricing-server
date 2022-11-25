@@ -211,11 +211,13 @@ def get_event_param(event, param_idx):
 
 
 async def async_main(async_session, begin=1, clean=False, silent=False):
+    logging.info("1")
     def get_end(substrate: SubstrateInterface):
         block_hash = substrate.get_chain_finalised_head()
         block = substrate.get_runtime_block(block_hash)
         return block["block"]["header"]["number"]
 
+    logging.info("2")
     # get the number of last block in the chain
     substrate = connect_to_substrate_node()
     try:
@@ -225,6 +227,7 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
         end = get_end(substrate)
         substrate = connect_to_substrate_node()
 
+    logging.info("3")
     selected_events = {"swap"}
     func_map = {
         k: v for k, v in get_processing_functions().items() if k in selected_events
@@ -232,6 +235,7 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
     xor_id_int = int(XOR_ID, 16)
     val_id_int = int(VAL_ID, 16)
     pswap_id_int = int(PSWAP_ID, 16)
+    logging.info("4")
     async with async_session() as session:
         # cache list of pairs in memory
         # to avoid SELECTing them everytime there is need to lookup ID by hash
