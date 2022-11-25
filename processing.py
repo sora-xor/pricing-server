@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Callable, Dict, List, Optional
+import logging
 
 from data_models import (
     BondStakeTx,
@@ -316,6 +317,7 @@ def process_batch_all(timestamp, extrinsicEvents, ex_dict):
 def get_timestamp(result) -> str:
     res = result["block"]["extrinsics"]
     s = res[0].value["call"]["call_args"][0]["value"]
+    logging.info(">>> Get timestamp from: %s", s)
     tms = s.split(".")
     ts = tms[0]
     ms = int(tms[1]) / 1000 if len(tms) > 1 else 0
