@@ -482,7 +482,7 @@ async def async_main_loop(async_session, args):
     Run import in an infinite loop.
     """
     while True:
-        async_main(async_session, args.begin, args.clean, args.silent)
+        await async_main(async_session, args.begin, args.clean, args.silent)
         if not args.silent:
             logging.info("Waiting for new blocks...")
         await asyncio.sleep(decouple.config("POLL_INTERVAL", default=600, cast=int))
