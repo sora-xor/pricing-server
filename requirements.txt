@@ -26,15 +26,15 @@ charset-normalizer==2.0.7
     # via requests
 click==8.0.3
     # via uvicorn
-fastapi==0.88
+fastapi==0.68.2
     # via -r requirements.in
-graphene==3.1.1
+graphene==2.1.9
     # via
     #   -r requirements.in
     #   graphene-sqlalchemy
 graphene-sqlalchemy==2.3.0
     # via -r requirements.in
-graphql-core==2.3.2
+graphql-core==3.1
     # via
     #   graphene
     #   graphql-relay
@@ -61,7 +61,7 @@ promise==2.3
     #   graphene-sqlalchemy
     #   graphql-core
     #   graphql-relay
-py-bip39-bindings==0.1.7
+py-bip39-bindings==0.1.9
     # via substrate-interface
 py-ed25519-bindings==1.0
     # via substrate-interface
@@ -97,7 +97,7 @@ sqlalchemy==1.4.26
     #   -r requirements.in
     #   alembic
     #   graphene-sqlalchemy
-starlette==0.22.0
+starlette==0.14.2
     # via fastapi
 substrate-interface==1.2.7
     # via -r requirements.in
