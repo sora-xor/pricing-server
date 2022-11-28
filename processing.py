@@ -107,13 +107,11 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
             output_asset_type = get_value(param)
         elif param["name"] == "swap_amount":
             if "WithDesiredInput" in get_value(param):
-                input_amount = get_value(param)["WithDesiredInput"]["desired_amount_in"]
-                output_amount = get_value(param)["WithDesiredInput"]["min_amount_out"]
+                input_amount = get_value(param)["WithDesiredInput"][0] # desired_amount_in
+                output_amount = get_value(param)["WithDesiredInput"][1] # min_amount_out
             else:  # then we do it by desired output
-                input_amount = get_value(param)["WithDesiredOutput"]["max_amount_in"]
-                output_amount = get_value(param)["WithDesiredOutput"][
-                    "desired_amount_out"
-                ]
+                output_amount = get_value(param)["WithDesiredOutput"][0] # desired_amount_out
+                input_amount = get_value(param)["WithDesiredOutput"][1] # max_amount_in
         elif param["name"] == "selected_source_types":
             filter_mode = get_value(param) or ["SMART"]
 
