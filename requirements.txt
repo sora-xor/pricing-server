@@ -97,7 +97,7 @@ sqlalchemy==1.4.26
     #   -r requirements.in
     #   alembic
     #   graphene-sqlalchemy
-starlette==0.14.2
+starlette==0.22.0
     # via fastapi
 substrate-interface==1.2.7
     # via -r requirements.in
