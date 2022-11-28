@@ -47,7 +47,7 @@ def get_by_key_or_index(attribute, key, index: int):
 
 
 def print_event(event):
-    if event["event_id"] == "Exchange":
+    if event["event_id"] == "Endowed" or event["event_id"] == "Transfer" or event["event_id"] == "Exchange":
         logging.info(">>> event = %s", event)
 
 
