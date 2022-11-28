@@ -29,16 +29,21 @@ DEPOSITED = "Deposited"
 def get_value(attribute):
     logging.info(">>> get_value: attribute = %s", attribute)
     if isinstance(attribute, dict):
-        logging.info(">>> return value = %s", attribute["value"])
+        logging.info(">>> return get_value value = %s", attribute["value"])
         return attribute["value"]
     else:
-        logging.info(">>> return = %s", attribute)
+        logging.info(">>> return get_value = %s", attribute)
         return attribute
 
 
-def print_event(event):
-    if event["event_id"] == "Transfer":
-        logging.info(">>> event = %s", event)
+def get_by_key_or_index(attribute, key, index):
+    logging.info(">>> get_by_key_or_index: attribute = %s, key = %s, index = %i", attribute, key, index)
+    if isinstance(attribute, dict):
+        logging.info(">>> return get_by_key_or_index by key = %s, value = %s", key, attribute[key])
+        return attribute[key]
+    else:
+        logging.info(">>> return get_by_key_or_index by index = %i, value = %s", index, attribute[index])
+        return attribute[index]
 
 
 def get_fees_from_event(event) -> float:
@@ -79,7 +84,6 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
     xor_amount = None
 
     for event in extrinsicEvents:
-        print_event(event)
         if event["event_id"] == "SwapSuccess":
             swap_success = True
         elif event["event_id"] == "ExtrinsicFailed":
@@ -88,7 +92,7 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
             dest, amount = event["event"]["attributes"]
             if get_value(dest) == XOR_ACCOUNT:
                 xor_amount = set_xor_amount(get_value(amount), xor_amount)
-        elif event['event_id'] == 'Transfer' and get_value(event['attributes'][1]) == XOR_ACCOUNT:
+        elif event["event_id"] == "Transfer" and get_value(event["attributes"][1]) == XOR_ACCOUNT:
             xor_amount = set_xor_amount(
                 get_value(event['attributes'][3]), xor_amount)
         elif event["event_id"] == "Exchange":
@@ -107,11 +111,11 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
             output_asset_type = get_value(param)
         elif param["name"] == "swap_amount":
             if "WithDesiredInput" in get_value(param):
-                input_amount = get_value(param)["WithDesiredInput"][0] # desired_amount_in
-                output_amount = get_value(param)["WithDesiredInput"][1] # min_amount_out
+                input_amount = get_by_key_or_index(get_value(param)["WithDesiredInput"], "desired_amount_in", 0)
+                output_amount = get_by_key_or_index(get_value(param)["WithDesiredInput"], "min_amount_out", 1)
             else:  # then we do it by desired output
-                output_amount = get_value(param)["WithDesiredOutput"][0] # desired_amount_out
-                input_amount = get_value(param)["WithDesiredOutput"][1] # max_amount_in
+                output_amount = get_by_key_or_index(get_value(param)["WithDesiredOutput"], "desired_amount_out", 0)
+                input_amount = get_by_key_or_index(get_value(param)["WithDesiredOutput"], "max_amount_in", 1)
         elif param["name"] == "selected_source_types":
             filter_mode = get_value(param) or ["SMART"]
 
