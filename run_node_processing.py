@@ -207,6 +207,7 @@ async def update_volumes(session):
 
 
 def get_event_param(event, param_idx):
+    logging.info(">>> get_event_param: id = %i, event = %s", param_idx, event)
     return event.value["event"]["attributes"][param_idx]["value"]
 
 
