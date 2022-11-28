@@ -77,7 +77,7 @@ requests==2.26.0
     #   substrate-interface
 rx==1.6.1
     # via graphql-core
-scalecodec==1.0.14
+scalecodec==1.0.37
     # via
     #   -r requirements.in
     #   substrate-interface
