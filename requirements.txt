@@ -99,7 +99,7 @@ sqlalchemy==1.4.26
     #   graphene-sqlalchemy
 starlette==0.14.2
     # via fastapi
-substrate-interface==1.0.5
+substrate-interface==1.2.7
     # via -r requirements.in
 tqdm==4.62.3
     # via -r requirements.in
