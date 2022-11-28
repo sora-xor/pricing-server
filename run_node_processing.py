@@ -25,6 +25,7 @@ from processing import (
     XOR_ID,
     get_processing_functions,
     get_timestamp,
+    get_value,
 )
 
 # Enable logging of RPC requests
@@ -207,16 +208,8 @@ async def update_volumes(session):
 
 
 def get_event_param(event, param_idx):
-    logging.info(">>> get_event_param: id = %i, event = %s", param_idx, event)
-
     attribute = event.value["event"]["attributes"][param_idx]
-
-    if isinstance(attribute, dict):
-        logging.info(">>> return atribute = %s", attribute["value"])
-        return attribute["value"]
-    else:
-        logging.info(">>> return atribute = %s", attribute)
-        return attribute
+    return get_value(attribute)
 
 
 async def async_main(async_session, begin=1, clean=False, silent=False):
