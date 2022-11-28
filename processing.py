@@ -94,7 +94,7 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
             swap_success = True
         elif event["event_id"] == "ExtrinsicFailed":
             swap_success = False
-        elif event["event_id"] == "Endowed":
+        elif event["module_id"] == "Balances" and event["event_id"] == "Endowed":
             dest, amount = event["event"]["attributes"]
             if get_value(dest) == XOR_ACCOUNT:
                 xor_amount = set_xor_amount(get_value(amount), xor_amount)
