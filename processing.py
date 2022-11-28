@@ -38,7 +38,7 @@ def get_value(attribute):
 
 def print_event(event):
     if event["event_id"] == "Transfer":
-        logging.info("event = %s", event)
+        logging.info(">>> event = %s", event)
 
 
 def get_fees_from_event(event) -> float:
@@ -88,9 +88,9 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
             dest, amount = event["event"]["attributes"]
             if get_value(dest) == XOR_ACCOUNT:
                 xor_amount = set_xor_amount(get_value(amount), xor_amount)
-        elif event['event_id'] == 'Transfer' and get_value(event['attributes'][0]) == XOR_ACCOUNT:
+        elif event['event_id'] == 'Transfer' and get_value(event['attributes'][1]) == XOR_ACCOUNT:
             xor_amount = set_xor_amount(
-                get_value(event['attributes'][2]), xor_amount)
+                get_value(event['attributes'][3]), xor_amount)
         elif event["event_id"] == "Exchange":
             input_amount = get_value(event["event"]["attributes"][4])
             output_amount = get_value(event["event"]["attributes"][5])
