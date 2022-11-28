@@ -26,17 +26,17 @@ CURRENCIES = "Currencies"
 DEPOSITED = "Deposited"
 
 
-def get_value(attribute):
-    logging.info(">>> get_value: attribute = %s", attribute)
+def get_value(attribute, name = "value"):
+    logging.info(">>> get_value: attribute = %s, name = %s", attribute, name)
     if isinstance(attribute, dict):
-        logging.info(">>> return get_value value = %s", attribute["value"])
-        return attribute["value"]
+        logging.info(">>> return get_value %s = %s", name, attribute[name])
+        return attribute[name]
     else:
         logging.info(">>> return get_value = %s", attribute)
         return attribute
 
 
-def get_by_key_or_index(attribute, key, index):
+def get_by_key_or_index(attribute, key, index: int):
     logging.info(">>> get_by_key_or_index: attribute = %s, key = %s, index = %i", attribute, key, index)
     if isinstance(attribute, dict):
         logging.info(">>> return get_by_key_or_index by key = %s, value = %s", key, attribute[key])
@@ -106,9 +106,9 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
 
     for param in ex_dict["call"]["call_args"]:
         if param["name"] == "input_asset_id":
-            input_asset_type = get_value(param)
+            input_asset_type = get_value(get_value(param), "code")
         elif param["name"] == "output_asset_id":
-            output_asset_type = get_value(param)
+            output_asset_type = get_value(get_value(param), "code")
         elif param["name"] == "swap_amount":
             if "WithDesiredInput" in get_value(param):
                 input_amount = get_by_key_or_index(get_value(param)["WithDesiredInput"], "desired_amount_in", 0)
