@@ -26,9 +26,9 @@ charset-normalizer==2.0.7
     # via requests
 click==8.0.3
     # via uvicorn
-fastapi==0.68.2
+fastapi==0.88
     # via -r requirements.in
-graphene==2.1.9
+graphene==3.1.1
     # via
     #   -r requirements.in
     #   graphene-sqlalchemy
@@ -63,7 +63,7 @@ promise==2.3
     #   graphql-relay
 py-bip39-bindings==0.1.7
     # via substrate-interface
-py-ed25519-bindings==0.1.3
+py-ed25519-bindings==1.0
     # via substrate-interface
 py-sr25519-bindings==0.1.4
     # via substrate-interface
