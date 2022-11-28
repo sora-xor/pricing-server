@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Callable, Dict, List, Optional
+import logging
 
 from data_models import (
     BondStakeTx,
@@ -26,9 +27,12 @@ DEPOSITED = "Deposited"
 
 
 def get_value(attribute):
+    logging.info(">>> get_value: attribute = %s", attribute)
     if isinstance(attribute, dict):
+        logging.info(">>> return value = %s", attribute["value"])
         return attribute["value"]
     else:
+        logging.info(">>> return = %s", attribute)
         return attribute
 
 
