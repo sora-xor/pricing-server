@@ -46,6 +46,11 @@ def get_by_key_or_index(attribute, key, index: int):
         return attribute[index]
 
 
+def print_event(event):
+    if event["event_id"] == "Exchange":
+        logging.info(">>> event = %s", event)
+
+
 def get_fees_from_event(event) -> float:
     if event["event_id"] == "FeeWithdrawn":
         return get_value(event["event"]["attributes"][1])
@@ -84,6 +89,7 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
     xor_amount = None
 
     for event in extrinsicEvents:
+        print_event(event)
         if event["event_id"] == "SwapSuccess":
             swap_success = True
         elif event["event_id"] == "ExtrinsicFailed":
