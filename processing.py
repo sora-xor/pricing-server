@@ -1,6 +1,5 @@
 from datetime import datetime
 from typing import Callable, Dict, List, Optional
-import logging
 
 from data_models import (
     BondStakeTx,
@@ -27,28 +26,17 @@ DEPOSITED = "Deposited"
 
 
 def get_value(attribute, name = "value"):
-    logging.info(">>> get_value: attribute = %s, name = %s", attribute, name)
     if isinstance(attribute, dict):
-        logging.info(">>> return get_value %s = %s", name, attribute[name])
         return attribute[name]
     else:
-        logging.info(">>> return get_value = %s", attribute)
         return attribute
 
 
 def get_by_key_or_index(attribute, key, index: int):
-    logging.info(">>> get_by_key_or_index: attribute = %s, key = %s, index = %i", attribute, key, index)
     if isinstance(attribute, dict):
-        logging.info(">>> return get_by_key_or_index by key = %s, value = %s", key, attribute[key])
         return attribute[key]
     else:
-        logging.info(">>> return get_by_key_or_index by index = %i, value = %s", index, attribute[index])
         return attribute[index]
-
-
-def print_event(event):
-    if event["event_id"] == "Endowed" or event["event_id"] == "Transfer" or event["event_id"] == "Exchange":
-        logging.info(">>> event = %s", event)
 
 
 def get_fees_from_event(event) -> float:
@@ -90,9 +78,7 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
     xor_amount = None
 
     for event in extrinsicEvents:
-        print_event(event)
         if event["event_id"] == "SwapSuccess":
-            logging.info(">>> it is swap")
             swap_success = True
         elif event["event_id"] == "ExtrinsicFailed":
             swap_success = False
