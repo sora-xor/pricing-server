@@ -91,6 +91,7 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
     for event in extrinsicEvents:
         print_event(event)
         if event["event_id"] == "SwapSuccess":
+            logging.info(">>> it is swap")
             swap_success = True
         elif event["event_id"] == "ExtrinsicFailed":
             swap_success = False
