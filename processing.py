@@ -77,6 +77,7 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
     # verify that the swap was a success
     swap_success = False
 
+    dex_id = None
     input_asset_type = None
     output_asset_type = None
     input_amount = None
@@ -112,7 +113,9 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
         return None
 
     for param in ex_dict["call"]["call_args"]:
-        if param["name"] == "input_asset_id":
+        if param["name"] == "dex_id":
+            dex_id = get_value(param)
+        elif param["name"] == "input_asset_id":
             input_asset_type = get_value(get_value(param), "code")
         elif param["name"] == "output_asset_id":
             output_asset_type = get_value(get_value(param), "code")
@@ -125,6 +128,9 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
                 input_amount = get_by_key_or_index(get_value(param)["WithDesiredOutput"], "max_amount_in", 1)
         elif param["name"] == "selected_source_types":
             filter_mode = get_value(param) or ["SMART"]
+    if dex_id != 0:
+        # TODO: add processing of new dex ids
+        return None
 
     if input_asset_type != XOR_ID and output_asset_type != XOR_ID:
         assert xor_amount is not None, ex_dict
