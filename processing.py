@@ -25,9 +25,23 @@ CURRENCIES = "Currencies"
 DEPOSITED = "Deposited"
 
 
+def get_value(attribute, name = "value"):
+    if isinstance(attribute, dict):
+        return attribute[name]
+    else:
+        return attribute
+
+
+def get_by_key_or_index(attribute, key, index: int):
+    if isinstance(attribute, dict):
+        return attribute[key]
+    else:
+        return attribute[index]
+
+
 def get_fees_from_event(event) -> float:
     if event["event_id"] == "FeeWithdrawn":
-        return event["event"]["attributes"][1]["value"]
+        return get_value(event["event"]["attributes"][1])
     return 0
 
 
@@ -51,6 +65,7 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
     # verify that the swap was a success
     swap_success = False
 
+    dex_id = None
     input_asset_type = None
     output_asset_type = None
     input_amount = None
@@ -67,38 +82,41 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
             swap_success = True
         elif event["event_id"] == "ExtrinsicFailed":
             swap_success = False
-        elif event["event_id"] == "Endowed":
+        elif event["module_id"] == "Balances" and event["event_id"] == "Endowed":
             dest, amount = event["event"]["attributes"]
-            if dest["value"] == XOR_ACCOUNT:
-                xor_amount = set_xor_amount(amount["value"], xor_amount)
-        elif event['event_id'] == 'Transfer' and event['attributes'][0]['value'] == XOR_ACCOUNT:
+            if get_value(dest) == XOR_ACCOUNT:
+                xor_amount = set_xor_amount(get_value(amount), xor_amount)
+        elif event["module_id"] == "Balances" and event["event_id"] == "Transfer" and get_value(event["attributes"][0]) == XOR_ACCOUNT:
             xor_amount = set_xor_amount(
-                event['attributes'][2]['value'], xor_amount)
+                get_value(event['attributes'][2]), xor_amount)
         elif event["event_id"] == "Exchange":
-            input_amount = event["event"]["attributes"][4]["value"]
-            output_amount = event["event"]["attributes"][5]["value"]
-            swap_fee_amount = event["event"]["attributes"][6]["value"]
+            input_amount = get_value(event["event"]["attributes"][4])
+            output_amount = get_value(event["event"]["attributes"][5])
+            swap_fee_amount = get_value(event["event"]["attributes"][6])
         xor_fee = max(get_fees_from_event(event), xor_fee)
     if not swap_success:
         # TODO: add swap fail handler
         return None
 
     for param in ex_dict["call"]["call_args"]:
-        if param["name"] == "input_asset_id":
-            input_asset_type = param["value"]
+        if param["name"] == "dex_id":
+            dex_id = get_value(param)
+        elif param["name"] == "input_asset_id":
+            input_asset_type = get_value(get_value(param), "code")
         elif param["name"] == "output_asset_id":
-            output_asset_type = param["value"]
+            output_asset_type = get_value(get_value(param), "code")
         elif param["name"] == "swap_amount":
-            if "WithDesiredInput" in param["value"]:
-                input_amount = param["value"]["WithDesiredInput"]["desired_amount_in"]
-                output_amount = param["value"]["WithDesiredInput"]["min_amount_out"]
+            if "WithDesiredInput" in get_value(param):
+                input_amount = get_by_key_or_index(get_value(param)["WithDesiredInput"], "desired_amount_in", 0)
+                output_amount = get_by_key_or_index(get_value(param)["WithDesiredInput"], "min_amount_out", 1)
             else:  # then we do it by desired output
-                input_amount = param["value"]["WithDesiredOutput"]["max_amount_in"]
-                output_amount = param["value"]["WithDesiredOutput"][
-                    "desired_amount_out"
-                ]
+                output_amount = get_by_key_or_index(get_value(param)["WithDesiredOutput"], "desired_amount_out", 0)
+                input_amount = get_by_key_or_index(get_value(param)["WithDesiredOutput"], "max_amount_in", 1)
         elif param["name"] == "selected_source_types":
-            filter_mode = param["value"] or ["SMART"]
+            filter_mode = get_value(param) or ["SMART"]
+    if dex_id != 0:
+        # TODO: add processing of new dex ids
+        return None
 
     if input_asset_type != XOR_ID and output_asset_type != XOR_ID:
         assert xor_amount is not None, ex_dict
@@ -131,13 +149,13 @@ def process_withdraw_transaction(timestamp, extrinsicEvents, ex_dict):
 
     for param in ex_dict["params"]:
         if param["name"] == "output_asset_a":
-            withdraw_asset1_type = param["value"]
+            withdraw_asset1_type = get_value(param)
         elif param["name"] == "output_asset_b":
-            withdraw_asset2_type = param["value"]
+            withdraw_asset2_type = get_value(param)
         elif param["name"] == "output_a_min":
-            withdraw_asset1_amount = param["value"]
+            withdraw_asset1_amount = get_value(param)
         elif param["name"] == "output_b_min":
-            withdraw_asset2_amount = param["value"]
+            withdraw_asset2_amount = get_value(param)
 
     return Withdraw(
         timestamp,
@@ -163,11 +181,11 @@ def process_deposit_transaction(timestamp, extrinsicEvents, ex_dict):
         xor_fee_paid = max(xor_fee_paid, get_fees_from_event(event))
 
         if event["event_id"] == "Transferred" and event["event_idx"] == 2:
-            deposit_asset1_id = event["params"][0]["value"]
-            deposit_asset1_amount = event["params"][3]["value"]
+            deposit_asset1_id = get_value(event["params"][0])
+            deposit_asset1_amount = get_value(event["params"][3])
         elif event["event_id"] == "Transferred" and event["event_idx"] == 3:
-            deposit_asset2_id = event["params"][0]["value"]
-            deposit_asset2_amount = event["params"][3]["value"]
+            deposit_asset2_id = get_value(event["params"][0])
+            deposit_asset2_amount = get_value(event["params"][3])
 
     if not success:
         # TODO: process other events
@@ -196,10 +214,10 @@ def process_in_bridge_tx(timestamp, extrinsicEvents, ex_dict):
         xor_fee_paid = max(xor_fee_paid, get_fees_from_event(event))
 
         if event["event_id"] == "Deposited":
-            asset_id = event["params"][0]["value"]
-            bridged_amt = event["params"][2]["value"]
+            asset_id = get_value(event["params"][0])
+            bridged_amt = get_value(event["params"][2])
         elif event["event_id"] == "RequestRegistered":
-            ext_tx_hash = event["params"][0]["value"]
+            ext_tx_hash = get_value(event["params"][0])
 
     if not bridge_success:
         return None
@@ -217,12 +235,12 @@ def process_out_bridge_tx(timestamp, extrinsicEvents, ex_dict):
 
     for param in ex_dict["params"]:
         if param["name"] == "asset_id":
-            outgoing_asset_id = param["value"]
+            outgoing_asset_id = get_value(param)
         elif param["name"] == "amount":
-            outgoing_asset_amt = param["value"]
+            outgoing_asset_amt = get_value(param)
         elif param["name"] == "to":
             ext_type = param["type"]
-            ext_address = param["value"]
+            ext_address = get_value(param)
 
     for event in extrinsicEvents:
         # TODO: should add logic here to collect the tx fee data
@@ -254,8 +272,8 @@ def process_claim(timestamp, extrinsicEvents, ex_dict):
         xor_fee_paid = max(xor_fee_paid, get_fees_from_event(event))
 
         if event["event_id"] == "Transferred" and event["event_idx"] == 1:
-            asset_id = event["params"][0]["value"]
-            asset_amt = event["params"][3]["value"]
+            asset_id = get_value(event["params"][0])
+            asset_amt = get_value(event["params"][3])
 
     if not claim_success:
         return None
@@ -267,8 +285,8 @@ def process_rewards(timestamp, extrinsicEvents, ex_dict):
 
     for event in extrinsicEvents:
         if event["event_id"] == "Reward":
-            acctId = event["params"][0]["value"]
-            rewardAmt = event["params"][1]["value"]
+            acctId = get_value(event["params"][0])
+            rewardAmt = get_value(event["params"][1])
             rewards.append((acctId, rewardAmt))
     # TODO: add return on rewards
     return None
@@ -284,8 +302,8 @@ def process_transfers(timestamp, extrinsicEvents, ex_dict):
         success = success or is_extrinsic_success(event)
         fees = max(fees, get_fees_from_event(event))
         if event["event_id"] == "Transferred" and event["event_idx"] == 2:
-            asset_id = event["params"][0]["value"]
-            amount = event["params"][3]["value"]
+            asset_id = get_value(event["params"][0])
+            amount = get_value(event["params"][3])
 
     if not success:
         return None
@@ -306,7 +324,7 @@ def process_batch_all(timestamp, extrinsicEvents, ex_dict):
 
         if event["event_id"] == "Bonded":
             batch_type = "BOND STAKE"
-            batch_amt = event["params"][1]["value"]
+            batch_amt = get_value(event["params"][1])
     if not success:
         return None
 
@@ -315,8 +333,16 @@ def process_batch_all(timestamp, extrinsicEvents, ex_dict):
 
 def get_timestamp(result) -> str:
     res = result["block"]["extrinsics"]
-    ts = res[0].value["call"]["call_args"][0]["value"]
-    return ts
+    s = get_value(res[0].value["call"]["call_args"][0])
+    timestamp = ""
+    if isinstance(s, int):
+        timestamp = s
+    else:
+        tms = s.split(".")
+        ts = tms[0]
+        ms = int(tms[1]) / 1000 if len(tms) > 1 else 0
+        timestamp = int(datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S").timestamp()) * 1000 + ms
+    return timestamp
 
 
 def get_processing_functions() -> Dict[
