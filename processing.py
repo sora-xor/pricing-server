@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Callable, Dict, List, Optional
+import logging
 
 from data_models import (
     BondStakeTx,
@@ -16,6 +17,7 @@ from data_models import (
 XOR_ID = "0x0200000000000000000000000000000000000000000000000000000000000000"
 VAL_ID = "0x0200040000000000000000000000000000000000000000000000000000000000"
 PSWAP_ID = "0x0200050000000000000000000000000000000000000000000000000000000000"
+XSTUSD_ID = "0x0200080000000000000000000000000000000000000000000000000000000000"
 XOR_ACCOUNT = (
     #"0x54734f90f971a02c609b2d684e61b5574e35ac9942579a2635aada58e5d836a7"  # noqa
     "cnTQ1kbv7PBNNQrEb1tZpmK7ftiv4yCCpUQy1J2y7Y54Taiaw"  # noqa
@@ -54,6 +56,7 @@ def is_extrinsic_success(event) -> bool:
     return event["event_id"] == "ExtrinsicSuccess"
 
 
+# todo
 def set_xor_amount(value, current_value):
     if current_value is None or value > current_value:
         return value
@@ -114,8 +117,9 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
                 input_amount = get_by_key_or_index(get_value(param)["WithDesiredOutput"], "max_amount_in", 1)
         elif param["name"] == "selected_source_types":
             filter_mode = get_value(param) or ["SMART"]
-    if dex_id != 0:
-        # TODO: add processing of new dex ids
+    
+    logging.info(">>> my_logs: process_swap_transaction dex = %i", dex_id)
+    if dex_id != 0 or dex_id != 1:
         return None
 
     if input_asset_type != XOR_ID and output_asset_type != XOR_ID:
@@ -131,6 +135,7 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
         filter_mode,
         swap_fee_amount,
         xor_amount,
+        dex_id,
     )
 
 

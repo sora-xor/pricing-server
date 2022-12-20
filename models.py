@@ -45,7 +45,7 @@ class Swap(Base):
     txid = Column(Numeric(80))
     block = Column(Integer, nullable=False)
     timestamp = Column(BigInteger, index=True, nullable=False)
-    xor_fee = Column(Numeric(20), nullable=False)
+    xor_fee = Column(Numeric(20), nullable=False) # todo
     pair_id = Column(ForeignKey("pair.id"), nullable=False)
     from_amount = Column(Numeric(), nullable=False)
     to_amount = Column(Numeric(), nullable=False)

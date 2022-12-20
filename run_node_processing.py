@@ -23,6 +23,7 @@ from processing import (
     PSWAP_ID,
     VAL_ID,
     XOR_ID,
+    XSTUSD_ID,
     get_processing_functions,
     get_timestamp,
     get_value,
@@ -232,6 +233,7 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
         k: v for k, v in get_processing_functions().items() if k in selected_events
     }
     xor_id_int = int(XOR_ID, 16)
+    xstusd_id_int = int(XSTUSD_ID, 16)
     val_id_int = int(VAL_ID, 16)
     pswap_id_int = int(PSWAP_ID, 16)
     async with async_session() as session:
@@ -246,9 +248,10 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
         pending = None
         if not silent:
             logging.info("Importing from %i to %i", begin, end)
-        # make sure XOR, VAL and PSWAP token entries created
+        # make sure XOR, XSTUSD, VAL and PSWAP token entries created
         # be able to import burns and buybacks
         await get_or_create_token(substrate, session, xor_id_int)
+        await get_or_create_token(substrate, session, xstusd_id_int)
         await get_or_create_token(substrate, session, val_id_int)
         await get_or_create_token(substrate, session, pswap_id_int)
         for block in (range if silent or not sys.stdout.isatty() else trange)(
@@ -280,30 +283,61 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                     to_asset = int(tx.pop("output_asset_id"), 16)
                     if not from_asset or not to_asset:
                         continue
-                    if from_asset == xor_id_int or to_asset == xor_id_int:
-                        data = [
-                            (
-                                from_asset,
-                                tx.pop("in_amount"),
-                                to_asset,
-                                tx.pop("out_amount"),
-                            )
-                        ]
-                    else:
-                        data = [
-                            (
-                                from_asset,
-                                tx.pop("in_amount"),
-                                xor_id_int,
-                                tx["xor_amount"],
-                            ),
-                            (
-                                xor_id_int,
-                                tx["xor_amount"],
-                                to_asset,
-                                tx.pop("out_amount"),
-                            ),
-                        ]
+                    
+                    dex_id = tx.pop("dex_id")
+                    if dex_id == 0:
+                        if from_asset == xor_id_int or to_asset == xor_id_int:
+                            data = [
+                                (
+                                    from_asset,
+                                    tx.pop("in_amount"),
+                                    to_asset,
+                                    tx.pop("out_amount"),
+                                )
+                            ]
+                        else:
+                            data = [
+                                (
+                                    from_asset,
+                                    tx.pop("in_amount"),
+                                    xor_id_int,
+                                    tx["xor_amount"],
+                                ),
+                                (
+                                    xor_id_int,
+                                    tx["xor_amount"],
+                                    to_asset,
+                                    tx.pop("out_amount"),
+                                ),
+                            ]
+                    if dex_id == 1:
+                        if from_asset == xstusd_id_int or to_asset == xstusd_id_int:
+                            logging.info(">>> my_logs: block = %i, dex = 1, from/to asset suitable, from = 0x%x, to = 0x%x, in = %i, out = %i", block, from_asset, to_asset, tx["in_amount"], tx["out_amount"])
+                            data = [
+                                (
+                                    from_asset,
+                                    tx.pop("in_amount"),
+                                    to_asset,
+                                    tx.pop("out_amount"),
+                                )
+                            ]
+                        else:
+                            # todo xstusd based, look dex id
+                            logging.info(">>> my_logs: block = %i, dex = 1, from/to asset not suitable, from = 0x%x, to = 0x%x, in = %i, out = %i, xor_amount = %i", block, from_asset, to_asset, tx["in_amount"], tx["out_amount"], tx["xor_amount"])
+                            data = [
+                                (
+                                    from_asset,
+                                    tx.pop("in_amount"),
+                                    xstusd_id_int,
+                                    tx["xor_amount"],
+                                ),
+                                (
+                                    xstusd_id_int,
+                                    tx["xor_amount"],
+                                    to_asset,
+                                    tx.pop("out_amount"),
+                                ),
+                            ]
                     del tx["xor_amount"]
                     tx["filter_mode"] = tx["filter_mode"][0]
                     tx["txid"] = tx.pop("id")
@@ -315,6 +349,7 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                         ).id
                         swaps.append(
                             (
+                                dex_id,
                                 from_asset,
                                 to_asset,
                                 Swap(
@@ -448,20 +483,25 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                                             amount=val_reminted_parliament,
                                         )
                                     )
+            new_swaps = []
             for i, swap in enumerate(swaps):
-                other_asset = swap[0] if swap[1] == xor_id_int else swap[1]
-                other_asset = '{0:#0{1}x}'.format(other_asset, 66)
-                params = [0, XOR_ID, other_asset, '1000000000000000000', 'WithDesiredInput', [], 'Disabled', block_hash]
-                result = substrate.rpc_request('liquidityProxy_quote', params)
-                pair = pairs[swap[0], swap[1]]
-                amount = int(result['result']['amount']) / DENOM
-                pair.quote_price = amount if swap[0] == xor_id_int else 1 / amount
-                session.add(pair)
-                swaps[i] = swap[2]
-            if swaps or burns:
+                if swap[0] == 0:
+                    other_asset = swap[1] if swap[2] == xor_id_int else swap[2]
+                    other_asset = '{0:#0{1}x}'.format(other_asset, 66)
+                    params = [0, XOR_ID, other_asset, '1000000000000000000', 'WithDesiredInput', [], 'Disabled', block_hash]
+                    result = substrate.rpc_request('liquidityProxy_quote', params)
+                    pair = pairs[swap[1], swap[2]]
+                    amount = int(result['result']['amount']) / DENOM
+                    pair.quote_price = amount if swap[1] == xor_id_int else 1 / amount
+                    session.add(pair)
+                    new_swaps.append(swap[3])
+                if swap[0] == 1:
+                    # todo xstusd
+                    logging.info(">>> my_logs: swap enum dex = 1, value = %s", swap)
+            if new_swaps or burns:
                 # save instances to DB
-                if swaps:
-                    session.add_all(swaps)
+                if new_swaps:
+                    session.add_all(new_swaps)
                 if burns:
                     session.add_all(burns)
                     session.add_all(buybacks)
