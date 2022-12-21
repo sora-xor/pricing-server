@@ -284,6 +284,8 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                     if not from_asset or not to_asset:
                         continue
                     
+                    intermediate_amount = tx.pop("intermediate_amount")
+                    
                     dex_id = tx.pop("dex_id")
                     if dex_id == 0:
                         if from_asset == xor_id_int or to_asset == xor_id_int:
@@ -301,11 +303,11 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                                     from_asset,
                                     tx.pop("in_amount"),
                                     xor_id_int,
-                                    tx["xor_amount"],
+                                    intermediate_amount,
                                 ),
                                 (
                                     xor_id_int,
-                                    tx["xor_amount"],
+                                    intermediate_amount,
                                     to_asset,
                                     tx.pop("out_amount"),
                                 ),
@@ -322,23 +324,21 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                                 )
                             ]
                         else:
-                            # todo xstusd based, look dex id
-                            logging.info(">>> my_logs: block = %i, dex = 1, from/to asset not suitable, from = 0x%x, to = 0x%x, in = %i, out = %i, xor_amount = %i", block, from_asset, to_asset, tx["in_amount"], tx["out_amount"], tx["xor_amount"])
+                            logging.info(">>> my_logs: block = %i, dex = 1, from/to asset not suitable, from = 0x%x, to = 0x%x, in = %i, out = %i, intermediate_amount = %i", block, from_asset, to_asset, tx["in_amount"], tx["out_amount"], intermediate_amount)
                             data = [
                                 (
                                     from_asset,
                                     tx.pop("in_amount"),
                                     xstusd_id_int,
-                                    tx["xor_amount"],
+                                    intermediate_amount,
                                 ),
                                 (
                                     xstusd_id_int,
-                                    tx["xor_amount"],
+                                    intermediate_amount,
                                     to_asset,
                                     tx.pop("out_amount"),
                                 ),
                             ]
-                    del tx["xor_amount"]
                     tx["filter_mode"] = tx["filter_mode"][0]
                     tx["txid"] = tx.pop("id")
                     for from_asset, from_amount, to_asset, to_amount in data:
@@ -496,8 +496,16 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                     session.add(pair)
                     new_swaps.append(swap[3])
                 if swap[0] == 1:
-                    # todo xstusd
-                    logging.info(">>> my_logs: swap enum dex = 1, value = %s", swap)
+                    other_asset = swap[1] if swap[2] == xstusd_id_int else swap[2]
+                    other_asset = '{0:#0{1}x}'.format(other_asset, 66)
+                    params = [1, XSTUSD_ID, other_asset, '1000000000000000000', 'WithDesiredInput', [], 'Disabled', block_hash]
+                    result = substrate.rpc_request('liquidityProxy_quote', params)
+                    pair = pairs[swap[1], swap[2]]
+                    amount = int(result['result']['amount']) / DENOM
+                    pair.quote_price = amount if swap[1] == xstusd_id_int else 1 / amount
+                    logging.info(">>> my_logs: swap enum dex = 1, pair = %s, value = %s", pair, swap)
+                    session.add(pair)
+                    new_swaps.append(swap[3])
             if new_swaps or burns:
                 # save instances to DB
                 if new_swaps:

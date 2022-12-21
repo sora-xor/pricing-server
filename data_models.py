@@ -119,7 +119,7 @@ from dataclasses import dataclass
 class SoraOp:
     id: int
     timestamp: int
-    xor_fee: int # todo
+    xor_fee: int
 
 
 @dataclass
@@ -134,7 +134,7 @@ class LiquidityTx(SoraOp):
 class Swap(LiquidityTx):
     filter_mode: str
     swap_fee_amount: int
-    xor_amount: int # todo
+    intermediate_amount: int
     dex_id: int
 
 

@@ -18,8 +18,8 @@ XOR_ID = "0x0200000000000000000000000000000000000000000000000000000000000000"
 VAL_ID = "0x0200040000000000000000000000000000000000000000000000000000000000"
 PSWAP_ID = "0x0200050000000000000000000000000000000000000000000000000000000000"
 XSTUSD_ID = "0x0200080000000000000000000000000000000000000000000000000000000000"
-XOR_ACCOUNT = (
-    #"0x54734f90f971a02c609b2d684e61b5574e35ac9942579a2635aada58e5d836a7"  # noqa
+TECH_ACCOUNT = (
+    # "0x54734f90f971a02c609b2d684e61b5574e35ac9942579a2635aada58e5d836a7"  # noqa
     "cnTQ1kbv7PBNNQrEb1tZpmK7ftiv4yCCpUQy1J2y7Y54Taiaw"  # noqa
 )
 
@@ -27,7 +27,7 @@ CURRENCIES = "Currencies"
 DEPOSITED = "Deposited"
 
 
-def get_value(attribute, name = "value"):
+def get_value(attribute, name="value"):
     if isinstance(attribute, dict):
         return attribute[name]
     else:
@@ -56,8 +56,7 @@ def is_extrinsic_success(event) -> bool:
     return event["event_id"] == "ExtrinsicSuccess"
 
 
-# todo
-def set_xor_amount(value, current_value):
+def set_max_amount(value, current_value):
     if current_value is None or value > current_value:
         return value
     else:
@@ -78,28 +77,7 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
     xor_fee = 0
 
     filter_mode = None
-    xor_amount = None
-
-    for event in extrinsicEvents:
-        if event["event_id"] == "SwapSuccess":
-            swap_success = True
-        elif event["event_id"] == "ExtrinsicFailed":
-            swap_success = False
-        elif event["module_id"] == "Balances" and event["event_id"] == "Endowed":
-            dest, amount = event["event"]["attributes"]
-            if get_value(dest) == XOR_ACCOUNT:
-                xor_amount = set_xor_amount(get_value(amount), xor_amount)
-        elif event["module_id"] == "Balances" and event["event_id"] == "Transfer" and get_value(event["attributes"][0]) == XOR_ACCOUNT:
-            xor_amount = set_xor_amount(
-                get_value(event['attributes'][2]), xor_amount)
-        elif event["event_id"] == "Exchange":
-            input_amount = get_value(event["event"]["attributes"][4])
-            output_amount = get_value(event["event"]["attributes"][5])
-            swap_fee_amount = get_value(event["event"]["attributes"][6])
-        xor_fee = max(get_fees_from_event(event), xor_fee)
-    if not swap_success:
-        # TODO: add swap fail handler
-        return None
+    intermediate_amount = None
 
     for param in ex_dict["call"]["call_args"]:
         if param["name"] == "dex_id":
@@ -110,20 +88,54 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
             output_asset_type = get_value(get_value(param), "code")
         elif param["name"] == "swap_amount":
             if "WithDesiredInput" in get_value(param):
-                input_amount = get_by_key_or_index(get_value(param)["WithDesiredInput"], "desired_amount_in", 0)
-                output_amount = get_by_key_or_index(get_value(param)["WithDesiredInput"], "min_amount_out", 1)
+                input_amount = get_by_key_or_index(
+                    get_value(param)["WithDesiredInput"], "desired_amount_in", 0)
+                output_amount = get_by_key_or_index(
+                    get_value(param)["WithDesiredInput"], "min_amount_out", 1)
             else:  # then we do it by desired output
-                output_amount = get_by_key_or_index(get_value(param)["WithDesiredOutput"], "desired_amount_out", 0)
-                input_amount = get_by_key_or_index(get_value(param)["WithDesiredOutput"], "max_amount_in", 1)
+                output_amount = get_by_key_or_index(
+                    get_value(param)["WithDesiredOutput"], "desired_amount_out", 0)
+                input_amount = get_by_key_or_index(
+                    get_value(param)["WithDesiredOutput"], "max_amount_in", 1)
         elif param["name"] == "selected_source_types":
             filter_mode = get_value(param) or ["SMART"]
-    
+
     logging.info(">>> my_logs: process_swap_transaction dex = %i", dex_id)
     if dex_id != 0 or dex_id != 1:
         return None
 
-    if input_asset_type != XOR_ID and output_asset_type != XOR_ID:
-        assert xor_amount is not None, ex_dict
+    for event in extrinsicEvents:
+        if event["event_id"] == "SwapSuccess":
+            swap_success = True
+        elif event["event_id"] == "ExtrinsicFailed":
+            swap_success = False
+        elif dex_id == 0 and event["module_id"] == "Balances" and event["event_id"] == "Endowed":
+            dest, amount = event["event"]["attributes"]
+            if get_value(dest) == TECH_ACCOUNT:
+                intermediate_amount = set_max_amount(
+                    get_value(amount), intermediate_amount)
+        elif dex_id == 1 and event["module_id"] == "Tokens" and event["event_id"] == "Endowed":
+            _, dest, amount = event["event"]["attributes"]
+            if get_value(dest) == TECH_ACCOUNT:
+                intermediate_amount = set_max_amount(
+                    get_value(amount), intermediate_amount)
+        elif dex_id == 0 and event["module_id"] == "Balances" and event["event_id"] == "Transfer" and get_value(event["attributes"][0]) == TECH_ACCOUNT:
+            intermediate_amount = set_max_amount(
+                get_value(event['attributes'][2]), intermediate_amount)
+        elif dex_id == 1 and event["module_id"] == "Tokens" and event["event_id"] == "Transfer" and get_value(event["attributes"][1]) == TECH_ACCOUNT:
+            intermediate_amount = set_max_amount(
+                get_value(event['attributes'][3]), intermediate_amount)
+        elif event["event_id"] == "Exchange":
+            input_amount = get_value(event["event"]["attributes"][4])
+            output_amount = get_value(event["event"]["attributes"][5])
+            swap_fee_amount = get_value(event["event"]["attributes"][6])
+        xor_fee = max(get_fees_from_event(event), xor_fee)
+    if not swap_success:
+        # TODO: add swap fail handler
+        return None
+
+    if (dex_id == 0 and input_asset_type != XOR_ID and output_asset_type != XOR_ID) or (dex_id == 1 and input_asset_type != XSTUSD_ID and output_asset_type != XSTUSD_ID):
+        assert intermediate_amount is not None, ex_dict
     return Swap(
         get_op_id(ex_dict),
         timestamp,
@@ -134,7 +146,7 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
         output_amount,
         filter_mode,
         swap_fee_amount,
-        xor_amount,
+        intermediate_amount,
         dex_id,
     )
 
@@ -346,7 +358,8 @@ def get_timestamp(result) -> str:
         tms = s.split(".")
         ts = tms[0]
         ms = int(tms[1]) / 1000 if len(tms) > 1 else 0
-        timestamp = int(datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S").timestamp()) * 1000 + ms
+        timestamp = int(datetime.strptime(
+            ts, "%Y-%m-%dT%H:%M:%S").timestamp()) * 1000 + ms
     return timestamp
 
 
