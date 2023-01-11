@@ -1,6 +1,5 @@
 from datetime import datetime
 from typing import Callable, Dict, List, Optional
-import logging
 
 from data_models import (
     BondStakeTx,
