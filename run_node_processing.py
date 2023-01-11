@@ -481,7 +481,6 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                                             amount=val_reminted_parliament,
                                         )
                                     )
-            new_swaps = []
             for i, swap in enumerate(swaps):
                 if swap[0] == 0:
                     other_asset = swap[1] if swap[2] == xor_id_int else swap[2]
@@ -493,7 +492,6 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                     pair.quote_price = amount if swap[1] == xor_id_int else 1 / amount
                     session.add(pair)
                     swaps[i] = swaps[3]
-                    new_swaps.append(swap[3])
                 if swap[0] == 1:
                     other_asset = swap[1] if swap[2] == xstusd_id_int else swap[2]
                     other_asset = '{0:#0{1}x}'.format(other_asset, 66)
