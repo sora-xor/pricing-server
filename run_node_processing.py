@@ -276,10 +276,8 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                 pending = None
             # prepare data to be INSERTed
             swaps = []
-            logging.info(">>> my_logs: block = %i, dataset = %s", block, dataset)
             for tx in dataset:
                 try:
-                    logging.info(">>> my_logs: block = %i, tx = %s", block, tx)
                     # skip transactions with invalid asset type 0x000....0
                     from_asset = int(tx.pop("input_asset_id"), 16)
                     to_asset = int(tx.pop("output_asset_id"), 16)
@@ -289,7 +287,6 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                     intermediate_amount = tx.pop("intermediate_amount")
                     
                     dex_id = tx.pop("dex_id")
-                    logging.info(">>> my_logs: block = %i, main dex_id = %i", block, dex_id)
                     if dex_id == 0:
                         if from_asset == xor_id_int or to_asset == xor_id_int:
                             data = [
@@ -317,7 +314,6 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                             ]
                     if dex_id == 1:
                         if from_asset == xstusd_id_int or to_asset == xstusd_id_int:
-                            logging.info(">>> my_logs: block = %i, dex = 1, from/to asset suitable, from = 0x%x, to = 0x%x, in = %i, out = %i", block, from_asset, to_asset, tx["in_amount"], tx["out_amount"])
                             data = [
                                 (
                                     from_asset,
@@ -327,7 +323,6 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                                 )
                             ]
                         else:
-                            logging.info(">>> my_logs: block = %i, dex = 1, from/to asset not suitable, from = 0x%x, to = 0x%x, in = %i, out = %i, intermediate_amount = %i", block, from_asset, to_asset, tx["in_amount"], tx["out_amount"], intermediate_amount)
                             data = [
                                 (
                                     from_asset,
@@ -496,8 +491,8 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                     pair = pairs[swap[1], swap[2]]
                     amount = int(result['result']['amount']) / DENOM
                     pair.quote_price = amount if swap[1] == xor_id_int else 1 / amount
-                    logging.info(">>> my_logs: block = %i, swap enum dex = 0, pair = %s, value = %s", block, pair, swap)
                     session.add(pair)
+                    swaps[i] = swaps[3]
                     new_swaps.append(swap[3])
                 if swap[0] == 1:
                     other_asset = swap[1] if swap[2] == xstusd_id_int else swap[2]
@@ -507,13 +502,12 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                     pair = pairs[swap[1], swap[2]]
                     amount = int(result['result']['amount']) / DENOM
                     pair.quote_price = amount if swap[1] == xstusd_id_int else 1 / amount
-                    logging.info(">>> my_logs: block = %i, swap enum dex = 1, pair = %s, value = %s", block, pair, swap)
                     session.add(pair)
-                    new_swaps.append(swap[3])
-            if new_swaps or burns:
+                    swaps[i] = swaps[3]
+            if swaps or burns:
                 # save instances to DB
-                if new_swaps:
-                    session.add_all(new_swaps)
+                if swaps:
+                    session.add_all(swaps)
                 if burns:
                     session.add_all(burns)
                     session.add_all(buybacks)

@@ -100,7 +100,6 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
         elif param["name"] == "selected_source_types":
             filter_mode = get_value(param) or ["SMART"]
 
-    logging.info(">>> my_logs: process_swap_transaction dex = %i", dex_id)
     if dex_id != 0 and dex_id != 1:
         return None
 
