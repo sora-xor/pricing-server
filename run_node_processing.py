@@ -276,6 +276,7 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                 pending = None
             # prepare data to be INSERTed
             swaps = []
+            logging.info(">>> my_logs: dataset = %s", dataset)
             for tx in dataset:
                 try:
                     logging.info(">>> my_logs: tx = %s", tx)
