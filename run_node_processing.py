@@ -278,6 +278,7 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
             swaps = []
             for tx in dataset:
                 try:
+                    logging.info(">>> my_logs: tx = %s", tx)
                     # skip transactions with invalid asset type 0x000....0
                     from_asset = int(tx.pop("input_asset_id"), 16)
                     to_asset = int(tx.pop("output_asset_id"), 16)
@@ -287,6 +288,7 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                     intermediate_amount = tx.pop("intermediate_amount")
                     
                     dex_id = tx.pop("dex_id")
+                    logging.info(">>> my_logs: main dex_id = %i", dex_id)
                     if dex_id == 0:
                         if from_asset == xor_id_int or to_asset == xor_id_int:
                             data = [
@@ -493,6 +495,7 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                     pair = pairs[swap[1], swap[2]]
                     amount = int(result['result']['amount']) / DENOM
                     pair.quote_price = amount if swap[1] == xor_id_int else 1 / amount
+                    logging.info(">>> my_logs: swap enum dex = 0, pair = %s, value = %s", pair, swap)
                     session.add(pair)
                     new_swaps.append(swap[3])
                 if swap[0] == 1:
