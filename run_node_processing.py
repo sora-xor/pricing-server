@@ -481,7 +481,8 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                                             amount=val_reminted_parliament,
                                         )
                                     )
-            for i, swap in enumerate(swaps):
+            parsed_swaps = []
+            for swap in swaps:
                 if swap[0] == 0:
                     other_asset = swap[1] if swap[2] == xor_id_int else swap[2]
                     other_asset = '{0:#0{1}x}'.format(other_asset, 66)
@@ -491,7 +492,7 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                     amount = int(result['result']['amount']) / DENOM
                     pair.quote_price = amount if swap[1] == xor_id_int else 1 / amount
                     session.add(pair)
-                    swaps[i] = swaps[3]
+                    parsed_swaps.append(swap[3])
                 if swap[0] == 1:
                     other_asset = swap[1] if swap[2] == xstusd_id_int else swap[2]
                     other_asset = '{0:#0{1}x}'.format(other_asset, 66)
@@ -501,11 +502,11 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                     amount = int(result['result']['amount']) / DENOM
                     pair.quote_price = amount if swap[1] == xstusd_id_int else 1 / amount
                     session.add(pair)
-                    swaps[i] = swaps[3]
-            if swaps or burns:
+                    parsed_swaps.append(swap[3])
+            if parsed_swaps or burns:
                 # save instances to DB
-                if swaps:
-                    session.add_all(swaps)
+                if parsed_swaps:
+                    session.add_all(parsed_swaps)
                 if burns:
                     session.add_all(burns)
                     session.add_all(buybacks)
