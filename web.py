@@ -18,7 +18,7 @@ from starlette.graphql import GraphQLApp
 from starlette.responses import JSONResponse
 
 from models import Burn, BuyBack, Pair, Swap, Token
-from processing import XOR_ID
+from processing import XOR_ID, XSTUSD_ID
 
 WHITELIST_URL = "https://raw.githubusercontent.com/sora-xor/polkaswap-token-whitelist-config/master/whitelist.json"  # noqa
 
@@ -216,6 +216,7 @@ async def pairs(session=Depends(get_db)):
     """
     pairs = {}
     xor_id_int = int(XOR_ID, 16)
+    xstusd_id_int = int(XSTUSD_ID, 16)
     # fetch all pairs info
     # select last swap for each pair in subquery to obtain price
     for p, last_price in await session.execute(
@@ -230,7 +231,7 @@ async def pairs(session=Depends(get_db)):
     ):
         # there are separate pairs for selling and buying XOR
         # need to sum them to calculate total volumes
-        if p.from_token_id == xor_id_int:
+        if p.from_token_id == xor_id_int or p.from_token_id == xstusd_id_int:
             # <p> contains XOR->XXX swaps
             base = p.to_token
             base_volume = p.to_volume
@@ -243,8 +244,8 @@ async def pairs(session=Depends(get_db)):
                 # reverse price
                 last_price = 1 / last_price
         else:
-            # should be no non-XOR pairs in DB
-            assert p.to_token_id == xor_id_int
+            # should be no non-XOR or non-XSTUSD pairs in DB
+            assert p.to_token_id == xor_id_int or p.to_token_id == xstusd_id_int
             # <p> contains XXX->XOR swaps
             base = p.from_token
             base_volume = p.from_volume

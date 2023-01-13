@@ -134,7 +134,8 @@ class LiquidityTx(SoraOp):
 class Swap(LiquidityTx):
     filter_mode: str
     swap_fee_amount: int
-    xor_amount: int
+    intermediate_amount: int
+    dex_id: int
 
 
 @dataclass
