@@ -108,12 +108,12 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
         elif event["event_id"] == "ExtrinsicFailed":
             swap_success = False
         elif dex_id == 0 and event["module_id"] == "Balances" and event["event_id"] == "Endowed":
-            dest, amount = event["event"]["attributes"]
+            dest, amount = event["event"]["attributes"].values()
             if get_value(dest) == TECH_ACCOUNT:
                 intermediate_amount = set_max_amount(
                     get_value(amount), intermediate_amount)
         elif dex_id == 1 and event["module_id"] == "Tokens" and event["event_id"] == "Endowed":
-            _, dest, amount = event["event"]["attributes"]
+            _, dest, amount = event["event"]["attributes"].values()
             if get_value(dest) == TECH_ACCOUNT:
                 intermediate_amount = set_max_amount(
                     get_value(amount), intermediate_amount)
