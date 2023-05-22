@@ -38,8 +38,8 @@ def connect_to_substrate_node():
     try:
         substrate = SubstrateInterface(
             url=decouple.config("SUBSTRATE_URL", "ws://127.0.0.1:9944"),
-            type_registry_preset="default",
             type_registry=load_type_registry_file("custom_types.json"),
+            ss58_format=69,
         )
         return substrate
     except ConnectionRefusedError:
@@ -53,8 +53,8 @@ def connect_to_substrate_node_mst():
     try:
         substrate = SubstrateInterface(
             url=decouple.config("SUBSTRATE_URL", "ws://127.0.0.1:9944"),
-            type_registry_preset="default",
             type_registry=load_type_registry_file("custom_types_mst.json"),
+            ss58_format=69,
         )
         return substrate
     except ConnectionRefusedError:
@@ -72,7 +72,7 @@ def get_events_from_block(substrate, block_id: int):
     block_hash = substrate.get_block_hash(block_id=block_id)
 
     # Retrieve extrinsics in block
-    result = substrate.get_runtime_block(
+    result = substrate.get_block(
         block_hash=block_hash
     )
     events = substrate.get_events(block_hash)
@@ -98,7 +98,7 @@ def process_events(dataset, func_map, result, grouped_events):
     extrinsic_idx = 0
     timestamp = get_timestamp(result)
 
-    for extrinsic in result["block"]["extrinsics"]:
+    for extrinsic in result["extrinsics"]:
         extrinsic_events = grouped_events[extrinsic_idx]
         extrinsic_idx += 1
         exdict = extrinsic and extrinsic.value
@@ -216,8 +216,8 @@ def get_event_param(event, param_idx):
 async def async_main(async_session, begin=1, clean=False, silent=False):
     def get_end(substrate: SubstrateInterface):
         block_hash = substrate.get_chain_finalised_head()
-        block = substrate.get_runtime_block(block_hash)
-        return block["block"]["header"]["number"]
+        block = substrate.get_block(block_hash)
+        return block["header"]["number"]
 
     # get the number of last block in the chain
     substrate = connect_to_substrate_node()

@@ -117,12 +117,12 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
             if get_value(dest) == TECH_ACCOUNT:
                 intermediate_amount = set_max_amount(
                     get_value(amount), intermediate_amount)
-        elif dex_id == 0 and event["module_id"] == "Balances" and event["event_id"] == "Transfer" and get_value(event["attributes"][0]) == TECH_ACCOUNT:
+        elif dex_id == 0 and event["module_id"] == "Balances" and event["event_id"] == "Transfer" and get_value(event["attributes"]['from']) == TECH_ACCOUNT:
             intermediate_amount = set_max_amount(
-                get_value(event['attributes'][2]), intermediate_amount)
-        elif dex_id == 1 and event["module_id"] == "Tokens" and event["event_id"] == "Transfer" and get_value(event["attributes"][1]) == TECH_ACCOUNT:
+                get_value(event['attributes']['amount']), intermediate_amount)
+        elif dex_id == 1 and event["module_id"] == "Tokens" and event["event_id"] == "Transfer" and get_value(event["attributes"]['from']) == TECH_ACCOUNT:
             intermediate_amount = set_max_amount(
-                get_value(event['attributes'][3]), intermediate_amount)
+                get_value(event['attributes']['amount']), intermediate_amount)
         elif event["event_id"] == "Exchange":
             input_amount = get_value(event["event"]["attributes"][4])
             output_amount = get_value(event["event"]["attributes"][5])
@@ -347,7 +347,7 @@ def process_batch_all(timestamp, extrinsicEvents, ex_dict):
 
 
 def get_timestamp(result) -> str:
-    res = result["block"]["extrinsics"]
+    res = result["extrinsics"]
     s = get_value(res[0].value["call"]["call_args"][0])
     timestamp = ""
     if isinstance(s, int):
