@@ -65,7 +65,7 @@ py-bip39-bindings==0.1.9
     # via substrate-interface
 py-ed25519-bindings==1.0
     # via substrate-interface
-py-sr25519-bindings==0.1.4
+py-sr25519-bindings==0.2.0
     # via substrate-interface
 pydantic==1.8.2
     # via fastapi
@@ -77,7 +77,7 @@ requests==2.26.0
     #   substrate-interface
 rx==1.6.1
     # via graphql-core
-scalecodec==1.0.37
+scalecodec==1.2.4
     # via
     #   -r requirements.in
     #   substrate-interface
@@ -99,7 +99,7 @@ sqlalchemy==1.4.26
     #   graphene-sqlalchemy
 starlette==0.14.2
     # via fastapi
-substrate-interface==1.2.7
+substrate-interface==1.7.1
     # via -r requirements.in
 tqdm==4.62.3
     # via -r requirements.in
