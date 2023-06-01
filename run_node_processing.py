@@ -489,8 +489,11 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                     params = [0, XOR_ID, other_asset, '1000000000000000000', 'WithDesiredInput', [], 'Disabled', block_hash]
                     result = substrate.rpc_request('liquidityProxy_quote', params)
                     pair = pairs[swap[1], swap[2]]
-                    amount = int(result['result']['amount']) / DENOM
-                    pair.quote_price = amount if swap[1] == xor_id_int else 1 / amount
+                    if result['result'] is not None:
+                        amount = int(result['result']['amount']) / DENOM
+                        pair.quote_price = amount if swap[1] == xor_id_int else 1 / amount
+                    else:
+                        pair.quote_price = None
                     session.add(pair)
                     parsed_swaps.append(swap[3])
                 if swap[0] == 1:
@@ -499,8 +502,11 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                     params = [1, XSTUSD_ID, other_asset, '1000000000000000000', 'WithDesiredInput', [], 'Disabled', block_hash]
                     result = substrate.rpc_request('liquidityProxy_quote', params)
                     pair = pairs[swap[1], swap[2]]
-                    amount = int(result['result']['amount']) / DENOM
-                    pair.quote_price = amount if swap[1] == xstusd_id_int else 1 / amount
+                    if result['result'] is not None:
+                        amount = int(result['result']['amount']) / DENOM
+                        pair.quote_price = amount if swap[1] == xstusd_id_int else 1 / amount
+                    else: 
+                        pair.quote_price = None
                     session.add(pair)
                     parsed_swaps.append(swap[3])
             if parsed_swaps or burns:
