@@ -28,6 +28,8 @@ services:
       start_period: 300s
   import:
     build: .
+    environment:
+      POLL_INTERVAL: "30"
     depends_on:
       postgres:
         condition: service_started
