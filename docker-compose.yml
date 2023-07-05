@@ -29,7 +29,7 @@ services:
   import:
     build: .
     environment:
-      POLL_INTERVAL: "30"
+      POLL_INTERVAL: "100"
     depends_on:
       postgres:
         condition: service_started
