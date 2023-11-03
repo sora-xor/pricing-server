@@ -103,10 +103,10 @@ def process_events(dataset, func_map, result, grouped_events):
 
     for extrinsic in result["extrinsics"]:
         extrinsic_events = grouped_events[extrinsic_idx]
+        exdict = extrinsic and extrinsic.value
         exdict['block_number'] = block_number
         exdict['extrinsic_index'] = extrinsic_idx
         extrinsic_idx += 1
-        exdict = extrinsic and extrinsic.value
         if exdict and "call" in exdict.keys():
             tx_type = exdict["call"]["call_function"]
             processing_func = func_map.get(tx_type)
