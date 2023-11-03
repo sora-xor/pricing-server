@@ -47,8 +47,7 @@ def get_fees_from_event(event) -> float:
 
 
 def get_op_id(ex_dict) -> int:
-    s = ex_dict["extrinsic_hash"]
-    return int(s, 16)
+    return int(ex_dict['block_number'] * 1e9 + ex_dict['extrinsic_index'])
 
 
 def is_extrinsic_success(event) -> bool:
@@ -359,6 +358,10 @@ def get_timestamp(result) -> str:
         timestamp = int(datetime.strptime(
             ts, "%Y-%m-%dT%H:%M:%S").timestamp()) * 1000 + ms
     return timestamp
+
+
+def get_block_number(result) -> int:
+    return result['header']['number']
 
 
 def get_processing_functions() -> Dict[

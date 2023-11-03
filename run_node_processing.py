@@ -24,6 +24,7 @@ from processing import (
     VAL_ID,
     XOR_ID,
     XSTUSD_ID,
+    get_block_number,
     get_processing_functions,
     get_timestamp,
     get_value,
@@ -33,6 +34,7 @@ from processing import (
 # substrateinterface.logger.setLevel(logging.DEBUG)
 
 DENOM = Decimal(10 ** 18)
+
 
 def connect_to_substrate_node():
     try:
@@ -97,16 +99,20 @@ def process_events(dataset, func_map, result, grouped_events):
     """
     extrinsic_idx = 0
     timestamp = get_timestamp(result)
+    block_number = get_block_number(result)
 
     for extrinsic in result["extrinsics"]:
         extrinsic_events = grouped_events[extrinsic_idx]
+        exdict['block_number'] = block_number
+        exdict['extrinsic_index'] = extrinsic_idx
         extrinsic_idx += 1
         exdict = extrinsic and extrinsic.value
         if exdict and "call" in exdict.keys():
             tx_type = exdict["call"]["call_function"]
             processing_func = func_map.get(tx_type)
             if processing_func:
-                tx = processing_func(timestamp, extrinsic_events, exdict)
+                tx = processing_func(
+                    timestamp, extrinsic_events, exdict)
                 if tx:
                     dataset.append(asdict(tx))
 
@@ -283,9 +289,9 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                     to_asset = int(tx.pop("output_asset_id"), 16)
                     if not from_asset or not to_asset:
                         continue
-                    
+
                     intermediate_amount = tx.pop("intermediate_amount")
-                    
+
                     dex_id = tx.pop("dex_id")
                     if dex_id == 0:
                         if from_asset == xor_id_int or to_asset == xor_id_int:
@@ -486,8 +492,10 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                 if swap[0] == 0:
                     other_asset = swap[1] if swap[2] == xor_id_int else swap[2]
                     other_asset = '{0:#0{1}x}'.format(other_asset, 66)
-                    params = [0, XOR_ID, other_asset, '1000000000000000000', 'WithDesiredInput', [], 'Disabled', block_hash]
-                    result = substrate.rpc_request('liquidityProxy_quote', params)
+                    params = [0, XOR_ID, other_asset, '1000000000000000000',
+                              'WithDesiredInput', [], 'Disabled', block_hash]
+                    result = substrate.rpc_request(
+                        'liquidityProxy_quote', params)
                     pair = pairs[swap[1], swap[2]]
                     if result['result'] is not None:
                         amount = int(result['result']['amount']) / DENOM
@@ -499,13 +507,15 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                 if swap[0] == 1:
                     other_asset = swap[1] if swap[2] == xstusd_id_int else swap[2]
                     other_asset = '{0:#0{1}x}'.format(other_asset, 66)
-                    params = [1, XSTUSD_ID, other_asset, '1000000000000000000', 'WithDesiredInput', [], 'Disabled', block_hash]
-                    result = substrate.rpc_request('liquidityProxy_quote', params)
+                    params = [1, XSTUSD_ID, other_asset, '1000000000000000000',
+                              'WithDesiredInput', [], 'Disabled', block_hash]
+                    result = substrate.rpc_request(
+                        'liquidityProxy_quote', params)
                     pair = pairs[swap[1], swap[2]]
                     if result['result'] is not None:
                         amount = int(result['result']['amount']) / DENOM
                         pair.quote_price = amount if swap[1] == xstusd_id_int else 1 / amount
-                    else: 
+                    else:
                         pair.quote_price = None
                     session.add(pair)
                     parsed_swaps.append(swap[3])
