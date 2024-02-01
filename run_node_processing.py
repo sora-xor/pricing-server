@@ -483,32 +483,37 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                                     )
             parsed_swaps = []
             for swap in swaps:
+                dex_id = swap[0]
                 if swap[0] == 0:
-                    other_asset = swap[1] if swap[2] == xor_id_int else swap[2]
-                    other_asset = '{0:#0{1}x}'.format(other_asset, 66)
-                    params = [0, XOR_ID, other_asset, '1000000000000000000', 'WithDesiredInput', [], 'Disabled', block_hash]
-                    result = substrate.rpc_request('liquidityProxy_quote', params)
-                    pair = pairs[swap[1], swap[2]]
-                    if result['result'] is not None:
-                        amount = int(result['result']['amount']) / DENOM
-                        pair.quote_price = amount if swap[1] == xor_id_int else 1 / amount
-                    else:
-                        pair.quote_price = None
-                    session.add(pair)
-                    parsed_swaps.append(swap[3])
+                    base_id = XOR_ID
+                    base_id_int = xor_id_int
                 if swap[0] == 1:
-                    other_asset = swap[1] if swap[2] == xstusd_id_int else swap[2]
-                    other_asset = '{0:#0{1}x}'.format(other_asset, 66)
-                    params = [1, XSTUSD_ID, other_asset, '1000000000000000000', 'WithDesiredInput', [], 'Disabled', block_hash]
-                    result = substrate.rpc_request('liquidityProxy_quote', params)
-                    pair = pairs[swap[1], swap[2]]
-                    if result['result'] is not None:
-                        amount = int(result['result']['amount']) / DENOM
-                        pair.quote_price = amount if swap[1] == xstusd_id_int else 1 / amount
-                    else: 
-                        pair.quote_price = None
-                    session.add(pair)
-                    parsed_swaps.append(swap[3])
+                    base_id = XSTUSD_ID
+                    base_id_int = xstusd_id_int
+                other_asset = swap[1] if swap[2] == base_id_int else swap[2]
+                other_asset = "{0:#0{1}x}".format(other_asset, 66)
+                if swap[1] == base_id_int:
+                    input_asset_id, output_asset_id = base_id, other_asset
+                else:
+                    input_asset_id, output_asset_id = other_asset, base_id
+                params = [
+                    dex_id,
+                    input_asset_id,
+                    output_asset_id,
+                    "1000000000000000000",
+                    "WithDesiredInput",
+                    [],
+                    "Disabled",
+                    block_hash,
+                ]
+                result = substrate.rpc_request("liquidityProxy_quote", params)
+                pair = pairs[swap[1], swap[2]]
+                if result["result"] is not None:
+                    pair.quote_price = int(result["result"]["amount"]) / DENOM
+                else:
+                    pair.quote_price = None
+                session.add(pair)
+                parsed_swaps.append(swap[3])
             if parsed_swaps or burns:
                 # save instances to DB
                 if parsed_swaps:

@@ -5,5 +5,6 @@ def pipeline = new org.docker.AppPipeline(steps: this,
     dockerRegistryCred: 'bot-sora2-rw',
     secretScannerExclusion: '.*docker-compose.yml',
     dockerImageTags: ['master':'latest'],
+    deepSecretScannerExclusion: ["web.py", "alembic.ini"],
     gitUpdateSubmodule: true)
 pipeline.runPipeline()
