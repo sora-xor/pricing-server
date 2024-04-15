@@ -25,6 +25,19 @@ TECH_ACCOUNT = (
 CURRENCIES = "Currencies"
 DEPOSITED = "Deposited"
 
+def get_swap_fee_amount(fee, pairs):
+    if isinstance(fee, list):
+        fee = dict(map(lambda info: (info[0]['code'], info[1]), fee))
+        final_fee = 0
+        for fee_asset in fee:
+            if fee_asset == XOR_ID:
+                price = 1
+            else:
+                price = pairs(fee_asset)
+            final_fee += fee[fee_asset] * price
+        return int(final_fee)
+    else:
+        return fee
 
 def get_value(attribute, name="value"):
     if isinstance(attribute, dict):
@@ -62,7 +75,7 @@ def set_max_amount(value, current_value):
         return current_value
 
 
-def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
+def process_swap_transaction(timestamp, extrinsicEvents, ex_dict, prices):
     # verify that the swap was a success
     swap_success = False
 
@@ -126,7 +139,7 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
         elif event["event_id"] == "Exchange":
             input_amount = get_value(event["event"]["attributes"][4])
             output_amount = get_value(event["event"]["attributes"][5])
-            swap_fee_amount = get_value(event["event"]["attributes"][6])
+            swap_fee_amount = get_swap_fee_amount(get_value(event["event"]["attributes"][6]), prices)
         xor_fee = max(get_fees_from_event(event), xor_fee)
     if not swap_success:
         # TODO: add swap fail handler
@@ -149,7 +162,7 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict):
     )
 
 
-def process_withdraw_transaction(timestamp, extrinsicEvents, ex_dict):
+def process_withdraw_transaction(timestamp, extrinsicEvents, ex_dict, prices):
     withdraw_asset1_type = None
     withdraw_asset2_type = None
     withdraw_asset1_amount = None
@@ -182,7 +195,7 @@ def process_withdraw_transaction(timestamp, extrinsicEvents, ex_dict):
     )
 
 
-def process_deposit_transaction(timestamp, extrinsicEvents, ex_dict):
+def process_deposit_transaction(timestamp, extrinsicEvents, ex_dict, prices):
     deposit_asset1_id = None
     deposit_asset2_id = None
     deposit_asset1_amount = None
@@ -216,7 +229,7 @@ def process_deposit_transaction(timestamp, extrinsicEvents, ex_dict):
     )
 
 
-def process_in_bridge_tx(timestamp, extrinsicEvents, ex_dict):
+def process_in_bridge_tx(timestamp, extrinsicEvents, ex_dict, prices):
     bridge_success = False
     asset_id = None
     bridged_amt = None
@@ -239,7 +252,7 @@ def process_in_bridge_tx(timestamp, extrinsicEvents, ex_dict):
     return InBridgeTx(timestamp, xor_fee_paid, asset_id, bridged_amt, ext_tx_hash)
 
 
-def process_out_bridge_tx(timestamp, extrinsicEvents, ex_dict):
+def process_out_bridge_tx(timestamp, extrinsicEvents, ex_dict, prices):
     bridge_success = False
     outgoing_asset_id = None
     outgoing_asset_amt = None
@@ -275,7 +288,7 @@ def process_out_bridge_tx(timestamp, extrinsicEvents, ex_dict):
     )
 
 
-def process_claim(timestamp, extrinsicEvents, ex_dict):
+def process_claim(timestamp, extrinsicEvents, ex_dict, prices):
     claim_success = False
     xor_fee_paid = 0
 
@@ -295,7 +308,7 @@ def process_claim(timestamp, extrinsicEvents, ex_dict):
     return ClaimTx(timestamp, xor_fee_paid, asset_id, asset_amt)
 
 
-def process_rewards(timestamp, extrinsicEvents, ex_dict):
+def process_rewards(timestamp, extrinsicEvents, ex_dict, prices):
     rewards = []
 
     for event in extrinsicEvents:
@@ -307,7 +320,7 @@ def process_rewards(timestamp, extrinsicEvents, ex_dict):
     return None
 
 
-def process_transfers(timestamp, extrinsicEvents, ex_dict):
+def process_transfers(timestamp, extrinsicEvents, ex_dict, prices):
     success = False
     asset_id = None
     amount = None
@@ -326,7 +339,7 @@ def process_transfers(timestamp, extrinsicEvents, ex_dict):
     return TransferTx(timestamp, fees, asset_id, amount)
 
 
-def process_batch_all(timestamp, extrinsicEvents, ex_dict):
+def process_batch_all(timestamp, extrinsicEvents, ex_dict, prices):
     success = False
     fees = 0
 
@@ -362,7 +375,7 @@ def get_timestamp(result) -> str:
 
 
 def get_processing_functions() -> Dict[
-    str, Callable[[str, List, Dict], Optional[SoraOp]]
+    str, Callable[[str, List, Dict, Callable[[str], float]], Optional[SoraOp]]
 ]:
     return {
         "swap": process_swap_transaction,
