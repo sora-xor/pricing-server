@@ -7,6 +7,9 @@ Base = declarative_base()
 class Token(Base):
     __tablename__ = "token"
 
+    # Original scheme don't work locally. Keep it here to make local development easier.
+    # pk = Column(Integer, primary_key=True)
+    # id = Column(Numeric(80), nullable=False, unique=True)
     id = Column(Numeric(80), primary_key=True)
     symbol = Column(String(8), nullable=False)
     name = Column(String(128), nullable=False)

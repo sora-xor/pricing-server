@@ -34,6 +34,43 @@ from processing import (
 
 DENOM = Decimal(10 ** 18)
 
+SWAP_FEE_ASSETS = {}
+
+def get_fee_price_func(substrate, block_hash, pairs):
+    xor_id_int = int(XOR_ID, 16)
+    for asset_id in list(SWAP_FEE_ASSETS):
+        asset_id_int = int(asset_id, 16)
+        if (asset_id_int, xor_id_int) in pairs and pairs[asset_id_int, xor_id_int].quote_price is not None:
+            SWAP_FEE_ASSETS[asset_id] = float(pairs[asset_id_int, xor_id_int].quote_price)
+
+    def get_fee_price(asset_id):
+        if asset_id in SWAP_FEE_ASSETS:
+            return SWAP_FEE_ASSETS[asset_id]
+
+        asset_id_int = int(asset_id, 16)
+        if (asset_id_int, xor_id_int) in pairs and pairs[asset_id_int, xor_id_int].quote_price is not None:
+            SWAP_FEE_ASSETS[asset_id] = float(pairs[asset_id_int, xor_id_int].quote_price)
+            return SWAP_FEE_ASSETS[asset_id]
+        
+        params = [
+            0,
+            asset_id,
+            XOR_ID,
+            "1000000000000000000",
+            "WithDesiredInput",
+            [],
+            "Disabled",
+            block_hash,
+        ]
+        result = substrate.rpc_request("liquidityProxy_quote", params)
+        price = 0
+        if result["result"] is not None:
+            price = int(result["result"]["amount"]) / DENOM
+
+        SWAP_FEE_ASSETS[asset_id] = float(price)
+        return price
+    return get_fee_price
+
 def connect_to_substrate_node():
     try:
         substrate = SubstrateInterface(
@@ -91,7 +128,7 @@ def get_events_from_block(substrate, block_id: int):
     return block_hash, events, result, grouped_events
 
 
-def process_events(dataset, func_map, result, grouped_events):
+def process_events(dataset, func_map, result, grouped_events, get_fee_price):
     """
     Call function from func_map for every extrinsic depending on extrinsic type.
     """
@@ -106,7 +143,7 @@ def process_events(dataset, func_map, result, grouped_events):
             tx_type = exdict["call"]["call_function"]
             processing_func = func_map.get(tx_type)
             if processing_func:
-                tx = processing_func(timestamp, extrinsic_events, exdict)
+                tx = processing_func(timestamp, extrinsic_events, exdict, get_fee_price)
                 if tx:
                     dataset.append(asdict(tx))
 
@@ -214,6 +251,11 @@ def get_event_param(event, param_idx):
 
 
 async def async_main(async_session, begin=1, clean=False, silent=False):
+    # if clean:
+    #     async with db.engine.begin() as conn:
+    #         await conn.run_sync(models.Base.metadata.drop_all)
+    #         await conn.run_sync(models.Base.metadata.create_all)
+
     def get_end(substrate: SubstrateInterface):
         block_hash = substrate.get_chain_finalised_head()
         block = substrate.get_block(block_hash)
@@ -269,7 +311,8 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                 substrate = connect_to_substrate_node()
 
             timestamp = get_timestamp(res)
-            process_events(dataset, func_map, res, grouped_events)
+            get_fee_price = get_fee_price_func(substrate, block_hash, pairs)
+            process_events(dataset, func_map, res, grouped_events, get_fee_price)
             # await previous INSERT to finish if any
             if pending:
                 await pending
