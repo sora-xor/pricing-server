@@ -17,6 +17,7 @@ XOR_ID = "0x0200000000000000000000000000000000000000000000000000000000000000"
 VAL_ID = "0x0200040000000000000000000000000000000000000000000000000000000000"
 PSWAP_ID = "0x0200050000000000000000000000000000000000000000000000000000000000"
 XSTUSD_ID = "0x0200080000000000000000000000000000000000000000000000000000000000"
+KXOR_ID = "0x02000e0000000000000000000000000000000000000000000000000000000000"
 TECH_ACCOUNT = (
     # "0x54734f90f971a02c609b2d684e61b5574e35ac9942579a2635aada58e5d836a7"  # noqa
     "cnTQ1kbv7PBNNQrEb1tZpmK7ftiv4yCCpUQy1J2y7Y54Taiaw"  # noqa
@@ -67,7 +68,9 @@ def get_op_id(ex_dict) -> int:
 def is_extrinsic_success(event) -> bool:
     return event["event_id"] == "ExtrinsicSuccess"
 
-
+def is_chameleon_swap(input_asset_type, output_asset_type, intermediate_amount):
+    return (input_asset_type == KXOR_ID or output_asset_type == KXOR_ID) and intermediate_amount is None
+    
 def set_max_amount(value, current_value):
     if current_value is None or value > current_value:
         return value
@@ -144,9 +147,12 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict, prices):
     if not swap_success:
         # TODO: add swap fail handler
         return None
-
-    if (dex_id == 0 and input_asset_type != XOR_ID and output_asset_type != XOR_ID) or (dex_id == 1 and input_asset_type != XSTUSD_ID and output_asset_type != XSTUSD_ID):
+    
+    if ((dex_id == 0 and input_asset_type != XOR_ID and output_asset_type != XOR_ID) \
+        or (dex_id == 1 and input_asset_type != XSTUSD_ID and output_asset_type != XSTUSD_ID)) \
+         and (not is_chameleon_swap(input_asset_type, output_asset_type, intermediate_amount)):
         assert intermediate_amount is not None, ex_dict
+        
     return Swap(
         get_op_id(ex_dict),
         timestamp,
