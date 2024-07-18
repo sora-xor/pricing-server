@@ -18,6 +18,7 @@ VAL_ID = "0x0200040000000000000000000000000000000000000000000000000000000000"
 PSWAP_ID = "0x0200050000000000000000000000000000000000000000000000000000000000"
 XSTUSD_ID = "0x0200080000000000000000000000000000000000000000000000000000000000"
 KXOR_ID = "0x02000e0000000000000000000000000000000000000000000000000000000000"
+ETH_ID="0x0200070000000000000000000000000000000000000000000000000000000000"
 TECH_ACCOUNT = (
     # "0x54734f90f971a02c609b2d684e61b5574e35ac9942579a2635aada58e5d836a7"  # noqa
     "cnTQ1kbv7PBNNQrEb1tZpmK7ftiv4yCCpUQy1J2y7Y54Taiaw"  # noqa
@@ -68,8 +69,10 @@ def get_op_id(ex_dict) -> int:
 def is_extrinsic_success(event) -> bool:
     return event["event_id"] == "ExtrinsicSuccess"
 
-def is_chameleon_swap(input_asset_type, output_asset_type, intermediate_amount):
-    return (input_asset_type == KXOR_ID or output_asset_type == KXOR_ID) and intermediate_amount is None
+def is_eth_kxor_pair(input_asset_type, output_asset_type):
+    return (input_asset_type == KXOR_ID or output_asset_type == KXOR_ID) \
+            and (input_asset_type == ETH_ID or output_asset_type == ETH_ID)
+                
     
 def set_max_amount(value, current_value):
     if current_value is None or value > current_value:
@@ -92,7 +95,7 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict, prices):
     xor_fee = 0
 
     filter_mode = None
-    intermediate_amount = None
+    intermediate_amounts = []
 
     for param in ex_dict["call"]["call_args"]:
         if param["name"] == "dex_id":
@@ -119,26 +122,18 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict, prices):
         return None
 
     for event in extrinsicEvents:
-        if event["event_id"] == "SwapSuccess":
+        if event["event_id"] == "SwapSuccess" or event["event_id"] == "ExtrinsicSuccess":
             swap_success = True
         elif event["event_id"] == "ExtrinsicFailed":
-            swap_success = False
-        elif dex_id == 0 and event["module_id"] == "Balances" and event["event_id"] == "Endowed":
-            dest, amount = event["event"]["attributes"].values()
-            if get_value(dest) == TECH_ACCOUNT:
-                intermediate_amount = set_max_amount(
-                    get_value(amount), intermediate_amount)
-        elif dex_id == 1 and event["module_id"] == "Tokens" and event["event_id"] == "Endowed":
-            _, dest, amount = event["event"]["attributes"].values()
-            if get_value(dest) == TECH_ACCOUNT:
-                intermediate_amount = set_max_amount(
-                    get_value(amount), intermediate_amount)
-        elif dex_id == 0 and event["module_id"] == "Balances" and event["event_id"] == "Transfer" and get_value(event["attributes"]['from']) == TECH_ACCOUNT:
-            intermediate_amount = set_max_amount(
-                get_value(event['attributes']['amount']), intermediate_amount)
-        elif dex_id == 1 and event["module_id"] == "Tokens" and event["event_id"] == "Transfer" and get_value(event["attributes"]['from']) == TECH_ACCOUNT:
-            intermediate_amount = set_max_amount(
-                get_value(event['attributes']['amount']), intermediate_amount)
+            swap_success = False  
+        elif event['module_id'] == "Assets" and event["event_id"] == "Transfer":
+            _, to_address, token_obj, amount  = event["attributes"]
+            if to_address == TECH_ACCOUNT:
+                intermediate_amounts.append((token_obj['code'], amount))
+        elif event['module_id'] == "Tokens" and event["event_id"] == "Deposited":
+            token_obj, who, amount  = event["attributes"].values()
+            if who == TECH_ACCOUNT:
+                intermediate_amounts.append((token_obj['code'], amount))
         elif event["event_id"] == "Exchange":
             input_amount = get_value(event["event"]["attributes"][4])
             output_amount = get_value(event["event"]["attributes"][5])
@@ -150,9 +145,9 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict, prices):
     
     if ((dex_id == 0 and input_asset_type != XOR_ID and output_asset_type != XOR_ID) \
         or (dex_id == 1 and input_asset_type != XSTUSD_ID and output_asset_type != XSTUSD_ID)) \
-         and (not is_chameleon_swap(input_asset_type, output_asset_type, intermediate_amount)):
-        assert intermediate_amount is not None, ex_dict
-        
+         and (not is_eth_kxor_pair(input_asset_type, output_asset_type)):
+        assert len(intermediate_amounts) > 0 , ex_dict
+
     return Swap(
         get_op_id(ex_dict),
         timestamp,
@@ -163,7 +158,7 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict, prices):
         output_amount,
         filter_mode,
         swap_fee_amount,
-        intermediate_amount,
+        intermediate_amounts,
         dex_id,
     )
 

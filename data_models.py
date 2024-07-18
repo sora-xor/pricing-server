@@ -113,7 +113,7 @@ UCDC
 
 """
 from dataclasses import dataclass
-
+from typing import List, Tuple 
 
 @dataclass
 class SoraOp:
@@ -134,7 +134,7 @@ class LiquidityTx(SoraOp):
 class Swap(LiquidityTx):
     filter_mode: str
     swap_fee_amount: int
-    intermediate_amount: int
+    intermediate_amounts: List[Tuple[str, int]]
     dex_id: int
 
 
