@@ -322,64 +322,56 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
             for tx in dataset:
                 try:
                     # skip transactions with invalid asset type 0x000....0
-                    from_asset = int(tx.pop("input_asset_id"), 16)
-                    to_asset = int(tx.pop("output_asset_id"), 16)
+                    input_asset_id = tx.pop("input_asset_id")
+                    output_asset_id = tx.pop("output_asset_id")
+                    from_asset = int(input_asset_id, 16)
+                    to_asset = int(output_asset_id, 16)
                     if not from_asset or not to_asset:
                         continue
                     
-                    intermediate_amount = tx.pop("intermediate_amount")
+                    intermediate_amounts = tx.pop("intermediate_amounts")
                     
                     dex_id = tx.pop("dex_id")
-                    if dex_id == 0:
-                        if from_asset == xor_id_int or to_asset == xor_id_int:
-                            data = [
-                                (
-                                    from_asset,
-                                    tx.pop("in_amount"),
-                                    to_asset,
-                                    tx.pop("out_amount"),
+                    if len(intermediate_amounts) == 0:
+                        data = [
+                            (
+                                from_asset,
+                                tx.pop("in_amount"),
+                                to_asset,
+                                tx.pop("out_amount"),
+                            )
+                        ]
+                    else:
+                        for idx, (asset_id, amount) in enumerate(intermediate_amounts):
+                            current_asset_id = int(asset_id, 16)
+                            if idx == 0:
+                                data = [
+                                    (
+                                        from_asset,
+                                        tx.pop("in_amount"),
+                                        current_asset_id,
+                                        amount,
+                                    )
+                                ]
+                            else:
+                                data.append(
+                                    (
+                                        int(intermediate_amounts[idx - 1][0], 16),  # Previous asset_id
+                                        intermediate_amounts[idx - 1][1],  # Previous amount
+                                        current_asset_id,
+                                        amount,
+                                    )
                                 )
-                            ]
-                        else:
-                            data = [
-                                (
-                                    from_asset,
-                                    tx.pop("in_amount"),
-                                    xor_id_int,
-                                    intermediate_amount,
-                                ),
-                                (
-                                    xor_id_int,
-                                    intermediate_amount,
-                                    to_asset,
-                                    tx.pop("out_amount"),
-                                ),
-                            ]
-                    if dex_id == 1:
-                        if from_asset == xstusd_id_int or to_asset == xstusd_id_int:
-                            data = [
-                                (
-                                    from_asset,
-                                    tx.pop("in_amount"),
-                                    to_asset,
-                                    tx.pop("out_amount"),
-                                )
-                            ]
-                        else:
-                            data = [
-                                (
-                                    from_asset,
-                                    tx.pop("in_amount"),
-                                    xstusd_id_int,
-                                    intermediate_amount,
-                                ),
-                                (
-                                    xstusd_id_int,
-                                    intermediate_amount,
-                                    to_asset,
-                                    tx.pop("out_amount"),
-                                ),
-                            ]
+
+                            if idx == len(intermediate_amounts) - 1:
+                                data.append(
+                                    (
+                                        current_asset_id,
+                                        amount,
+                                        to_asset,
+                                        tx.pop("out_amount"),
+                                    )
+                            )
                     tx["filter_mode"] = tx["filter_mode"][0]
                     tx["txid"] = tx.pop("id")
                     for from_asset, from_amount, to_asset, to_amount in data:
@@ -537,8 +529,10 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                 other_asset = "{0:#0{1}x}".format(other_asset, 66)
                 if swap[1] == base_id_int:
                     input_asset_id, output_asset_id = base_id, other_asset
-                else:
+                elif swap[2] == base_id_int:
                     input_asset_id, output_asset_id = other_asset, base_id
+                else:
+                    input_asset_id, output_asset_id = "{0:#0{1}x}".format(swap[1], 66), "{0:#0{1}x}".format(swap[2], 66)
                 params = [
                     dex_id,
                     input_asset_id,
