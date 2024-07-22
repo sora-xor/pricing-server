@@ -244,9 +244,6 @@ async def pairs(session=Depends(get_db)):
                 # reverse price
                 last_price = 1 / last_price
         else:
-            # should be no non-XOR or non-XSTUSD pairs in DB
-            assert p.to_token_id == xor_id_int or p.to_token_id == xstusd_id_int
-            # <p> contains XXX->XOR swaps
             base = p.from_token
             base_volume = p.from_volume
             quote = p.to_token
