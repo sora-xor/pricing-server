@@ -65,7 +65,7 @@ def get_fee_price_func(substrate, block_hash, pairs):
         result = substrate.rpc_request("liquidityProxy_quote", params)
         price = 0
         if result["result"] is not None:
-            price = int(result["result"]["amount"]) / DENOM
+            price = int(result["result"]["amount_without_impact"]) / DENOM
 
         SWAP_FEE_ASSETS[asset_id] = float(price)
         return price
@@ -546,7 +546,7 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                 result = substrate.rpc_request("liquidityProxy_quote", params)
                 pair = pairs[swap[1], swap[2]]
                 if result["result"] is not None:
-                    pair.quote_price = int(result["result"]["amount"]) / DENOM
+                    pair.quote_price = int(result["result"]["amount_without_impact"]) / DENOM
                 else:
                     pair.quote_price = None
                 session.add(pair)
