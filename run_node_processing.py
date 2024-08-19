@@ -24,6 +24,7 @@ from processing import (
     VAL_ID,
     XOR_ID,
     XSTUSD_ID,
+    KUSD_ID,
     get_processing_functions,
     get_timestamp,
     get_value,
@@ -278,6 +279,7 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
     xstusd_id_int = int(XSTUSD_ID, 16)
     val_id_int = int(VAL_ID, 16)
     pswap_id_int = int(PSWAP_ID, 16)
+    kusd_id_int = int(KUSD_ID, 16)
     async with async_session() as session:
         # cache list of pairs in memory
         # to avoid SELECTing them everytime there is need to lookup ID by hash
@@ -525,6 +527,9 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                 if swap[0] == 1:
                     base_id = XSTUSD_ID
                     base_id_int = xstusd_id_int
+                if swap[0] == 2:
+                    base_id = KUSD_ID
+                    base_id_int = kusd_id_int
                 other_asset = swap[1] if swap[2] == base_id_int else swap[2]
                 other_asset = "{0:#0{1}x}".format(other_asset, 66)
                 if swap[1] == base_id_int:
