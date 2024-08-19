@@ -17,6 +17,7 @@ XOR_ID = "0x0200000000000000000000000000000000000000000000000000000000000000"
 VAL_ID = "0x0200040000000000000000000000000000000000000000000000000000000000"
 PSWAP_ID = "0x0200050000000000000000000000000000000000000000000000000000000000"
 XSTUSD_ID = "0x0200080000000000000000000000000000000000000000000000000000000000"
+XST_ID = "0x0200090000000000000000000000000000000000000000000000000000000000"
 KXOR_ID = "0x02000e0000000000000000000000000000000000000000000000000000000000"
 ETH_ID="0x0200070000000000000000000000000000000000000000000000000000000000"
 TECH_ACCOUNT = (
@@ -73,7 +74,9 @@ def is_eth_kxor_pair(input_asset_type, output_asset_type):
     return (input_asset_type == KXOR_ID or output_asset_type == KXOR_ID) \
             and (input_asset_type == ETH_ID or output_asset_type == ETH_ID)
                 
-    
+def is_xst_based_pair(input_asset_type, output_asset_type):
+    return input_asset_type == XST_ID or output_asset_type == XST_ID
+            
 def set_max_amount(value, current_value):
     if current_value is None or value > current_value:
         return value
@@ -145,7 +148,8 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict, prices):
     
     if ((dex_id == 0 and input_asset_type != XOR_ID and output_asset_type != XOR_ID) \
         or (dex_id == 1 and input_asset_type != XSTUSD_ID and output_asset_type != XSTUSD_ID)) \
-         and (not is_eth_kxor_pair(input_asset_type, output_asset_type)):
+         and (not is_eth_kxor_pair(input_asset_type, output_asset_type)) \
+             and (not is_xst_based_pair(input_asset_type, output_asset_type)):
         assert len(intermediate_amounts) > 0 , ex_dict
 
     return Swap(
