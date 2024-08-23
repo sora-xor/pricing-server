@@ -34,7 +34,6 @@ from processing import (
 # substrateinterface.logger.setLevel(logging.DEBUG)
 
 DENOM = Decimal(10 ** 18)
-BLOCK_IMPORT_LIMIT = 1000
 
 SWAP_FEE_ASSETS = {}
 
@@ -251,8 +250,8 @@ def get_event_param(event, param_idx):
     attribute = event.value["event"]["attributes"][param_idx]
     return get_value(attribute)
 
-async def async_main(async_session, begin=None, clean=False, silent=False):
-    begin = decouple.config("BEGIN", default=1, cast=int)
+
+async def async_main(async_session, begin=1, clean=False, silent=False):
     # if clean:
     #     async with db.engine.begin() as conn:
     #         await conn.run_sync(models.Base.metadata.drop_all)
@@ -289,8 +288,6 @@ async def async_main(async_session, begin=None, clean=False, silent=False):
         last = (await session.execute(func.max(Swap.block))).scalar()
         if last:
             begin = last + 1
-        end = min(end, begin + BLOCK_IMPORT_LIMIT)
-
         # sync from last block in the DB to last block in the chain
         pending = None
         if not silent:
