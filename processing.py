@@ -131,13 +131,10 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict, prices):
         elif event["event_id"] == "ExtrinsicFailed":
             swap_success = False  
         elif event['module_id'] == "Assets" and event["event_id"] == "Transfer":
-            _, to_address, token_obj, amount  = event["attributes"]
-            if to_address == TECH_ACCOUNT:
-                intermediate_amounts.append((token_obj['code'], amount))
-        elif event['module_id'] == "Balances" and event["event_id"] == "Transfer":
-            _, to_address, amount  = event["attributes"].values()
-            if to_address == TECH_ACCOUNT:
-                intermediate_amounts.append((XOR_ID, amount))
+            from_address, to_address, token_obj, amount  = event["attributes"]
+            if not any(token_obj['code'] == token for token, _ in intermediate_amounts):
+                if TECH_ACCOUNT in [from_address, to_address]:
+                    intermediate_amounts.append((token_obj['code'], amount))
         elif event['module_id'] == "Tokens" and event["event_id"] == "Deposited":
             token_obj, who, amount  = event["attributes"].values()
             if who == TECH_ACCOUNT:
