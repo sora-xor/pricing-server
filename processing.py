@@ -19,7 +19,8 @@ PSWAP_ID = "0x0200050000000000000000000000000000000000000000000000000000000000"
 XSTUSD_ID = "0x0200080000000000000000000000000000000000000000000000000000000000"
 XST_ID = "0x0200090000000000000000000000000000000000000000000000000000000000"
 KXOR_ID = "0x02000e0000000000000000000000000000000000000000000000000000000000"
-ETH_ID="0x0200070000000000000000000000000000000000000000000000000000000000"
+ETH_ID = "0x0200070000000000000000000000000000000000000000000000000000000000"
+KUSD_ID = "0x02000c0000000000000000000000000000000000000000000000000000000000"
 TECH_ACCOUNT = (
     # "0x54734f90f971a02c609b2d684e61b5574e35ac9942579a2635aada58e5d836a7"  # noqa
     "cnTQ1kbv7PBNNQrEb1tZpmK7ftiv4yCCpUQy1J2y7Y54Taiaw"  # noqa
@@ -121,7 +122,7 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict, prices):
         elif param["name"] == "selected_source_types":
             filter_mode = get_value(param) or ["SMART"]
 
-    if dex_id != 0 and dex_id != 1:
+    if dex_id not in [0, 1, 2] :
         return None
 
     for event in extrinsicEvents:
@@ -147,7 +148,8 @@ def process_swap_transaction(timestamp, extrinsicEvents, ex_dict, prices):
         return None
     
     if ((dex_id == 0 and input_asset_type != XOR_ID and output_asset_type != XOR_ID) \
-        or (dex_id == 1 and input_asset_type != XSTUSD_ID and output_asset_type != XSTUSD_ID)) \
+        or (dex_id == 1 and input_asset_type != XSTUSD_ID and output_asset_type != XSTUSD_ID) \
+            or (dex_id == 2 and input_asset_type != KUSD_ID and output_asset_type != KUSD_ID)) \
          and (not is_eth_kxor_pair(input_asset_type, output_asset_type)) \
              and (not is_xst_based_pair(input_asset_type, output_asset_type)):
         assert len(intermediate_amounts) > 0 , ex_dict
