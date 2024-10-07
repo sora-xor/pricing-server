@@ -230,6 +230,8 @@ async def pairs(session=Depends(get_db)):
             .scalar_subquery(),
         ).options(selectinload(Pair.from_token), selectinload(Pair.to_token))
     ):
+        if last_price is None:
+            continue
         # there are separate pairs for selling and buying XOR
         # need to sum them to calculate total volumes
         if p.from_token_id == xor_id_int or p.from_token_id == xstusd_id_int or p.from_token_id == kusd_id_int:
