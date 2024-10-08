@@ -258,6 +258,9 @@ async def pairs(session=Depends(get_db)):
                 pairs[id]["base_volume"] += FormattedFloat(base_volume)
             if quote_volume:
                 pairs[id]["quote_volume"] += FormattedFloat(quote_volume)
+        elif (quote_price is None and last_price == 0) or (last_price is None and quote_price == 0) or \
+            (last_price is None and quote_price is None):
+            continue
         else:
             pairs[id] = {
                 "base_id": base.hash,
