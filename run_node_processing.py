@@ -295,13 +295,12 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
         pending = None
         if not silent:
             logging.info("Importing from %i to %i", begin, end)
-        # make sure XOR, XSTUSD, VAL, PSWAP and VXOR token entries created
+        # make sure XOR, XSTUSD, VAL and PSWAP token entries created
         # be able to import burns and buybacks
         await get_or_create_token(substrate, session, xor_id_int)
         await get_or_create_token(substrate, session, xstusd_id_int)
         await get_or_create_token(substrate, session, val_id_int)
         await get_or_create_token(substrate, session, pswap_id_int)
-        await get_or_create_token(substrate, session, vxor_id_int)
         for block in (range if silent or not sys.stdout.isatty() else trange)(
             begin, end
         ):
