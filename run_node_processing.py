@@ -12,7 +12,6 @@ from scalecodec.type_registry import load_type_registry_file
 from sqlalchemy import and_, func, update
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-import substrateinterface
 from substrateinterface import SubstrateInterface
 from tqdm import trange
 
@@ -37,6 +36,10 @@ from processing import (
 DENOM = Decimal(10 ** 18)
 
 SWAP_FEE_ASSETS = {}
+
+BLOCK_IMPORT_LIMIT = 100 # In blocks, 0, None or float("inf") - to not stop
+
+WAIT_FOR_NEXT_IMPORT = 10 # In seconds
 
 def get_fee_price_func(substrate, block_hash, pairs):
     xor_id_int = int(XOR_ID, 16)
@@ -304,6 +307,10 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
         for block in (range if silent or not sys.stdout.isatty() else trange)(
             begin, end
         ):
+            if BLOCK_IMPORT_LIMIT != 0 and BLOCK_IMPORT_LIMIT is not None:
+                if (block - begin + 1) % BLOCK_IMPORT_LIMIT == 0:
+                    logging.info("Waiting %i seconds to get next block", WAIT_FOR_NEXT_IMPORT)
+                    await asyncio.sleep(WAIT_FOR_NEXT_IMPORT)
             # get events from <block> to <dataset>
             dataset = []
             try:
