@@ -37,9 +37,9 @@ DENOM = Decimal(10 ** 18)
 
 SWAP_FEE_ASSETS = {}
 
-BLOCK_IMPORT_LIMIT = 100 # In blocks, 0, None or float("inf") - to not stop
+BLOCK_IMPORT_LIMIT = 10 # In blocks, 0, None or float("inf") - to not stop
 
-WAIT_FOR_NEXT_IMPORT = 10 # In seconds
+WAIT_FOR_NEXT_IMPORT = 2 # In seconds
 
 def get_fee_price_func(substrate, block_hash, pairs):
     xor_id_int = int(XOR_ID, 16)
