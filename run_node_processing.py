@@ -255,7 +255,7 @@ def get_event_param(event, param_idx):
     return get_value(attribute)
 
 
-async def async_main(async_session, begin=109052, clean=False, silent=False):
+async def async_main(async_session, begin=1, clean=False, silent=False):
     # if clean:
     #     async with db.engine.begin() as conn:
     #         await conn.run_sync(models.Base.metadata.drop_all)
