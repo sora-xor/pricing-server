@@ -37,9 +37,9 @@ DENOM = Decimal(10 ** 18)
 
 SWAP_FEE_ASSETS = {}
 
-# BLOCK_IMPORT_LIMIT = 5 # In blocks, 0, None or float("inf") - to not stop
+BLOCK_IMPORT_LIMIT = 10 # In blocks, 0, None or float("inf") - to not stop
 
-# WAIT_FOR_NEXT_IMPORT = 5 # In seconds
+WAIT_FOR_NEXT_IMPORT = 4 # In seconds
 
 def get_fee_price_func(substrate, block_hash, pairs):
     xor_id_int = int(XOR_ID, 16)
@@ -307,11 +307,11 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
         for block in (range if silent or not sys.stdout.isatty() else trange)(
             begin, end
         ):
-            # if BLOCK_IMPORT_LIMIT != 0 and BLOCK_IMPORT_LIMIT is not None:
-            #     if (block - begin + 1) % BLOCK_IMPORT_LIMIT == 0:
-            #         logging.info("Waiting %i seconds to get next block", WAIT_FOR_NEXT_IMPORT)
-            #         await asyncio.sleep(WAIT_FOR_NEXT_IMPORT)
-            # get events from <block> to <dataset>
+            if BLOCK_IMPORT_LIMIT != 0 and BLOCK_IMPORT_LIMIT is not None:
+                if (block - begin + 1) % BLOCK_IMPORT_LIMIT == 0:
+                    logging.info("Waiting %i seconds to get next block", WAIT_FOR_NEXT_IMPORT)
+                    await asyncio.sleep(WAIT_FOR_NEXT_IMPORT)
+            get events from <block> to <dataset>
             dataset = []
             try:
                 block_hash, events, res, grouped_events = get_events_from_block(
