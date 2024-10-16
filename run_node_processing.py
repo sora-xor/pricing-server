@@ -12,7 +12,6 @@ from scalecodec.type_registry import load_type_registry_file
 from sqlalchemy import and_, func, update
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-import substrateinterface
 from substrateinterface import SubstrateInterface
 from tqdm import trange
 
@@ -25,6 +24,7 @@ from processing import (
     XOR_ID,
     XSTUSD_ID,
     KUSD_ID,
+    VXOR_ID,
     get_processing_functions,
     get_timestamp,
     get_value,
@@ -36,6 +36,10 @@ from processing import (
 DENOM = Decimal(10 ** 18)
 
 SWAP_FEE_ASSETS = {}
+
+# BLOCK_IMPORT_LIMIT = 10 # In blocks, 0, None or float("inf") - to not stop
+
+# WAIT_FOR_NEXT_IMPORT = 4 # In seconds
 
 def get_fee_price_func(substrate, block_hash, pairs):
     xor_id_int = int(XOR_ID, 16)
@@ -280,6 +284,8 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
     val_id_int = int(VAL_ID, 16)
     pswap_id_int = int(PSWAP_ID, 16)
     kusd_id_int = int(KUSD_ID, 16)
+    vxor_id_int = int(VXOR_ID, 16)
+
     async with async_session() as session:
         # cache list of pairs in memory
         # to avoid SELECTing them everytime there is need to lookup ID by hash
@@ -292,15 +298,20 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
         pending = None
         if not silent:
             logging.info("Importing from %i to %i", begin, end)
-        # make sure XOR, XSTUSD, VAL and PSWAP token entries created
+        # make sure XOR, XSTUSD, VAL, PSWAP and VXOR token entries created
         # be able to import burns and buybacks
         await get_or_create_token(substrate, session, xor_id_int)
         await get_or_create_token(substrate, session, xstusd_id_int)
         await get_or_create_token(substrate, session, val_id_int)
         await get_or_create_token(substrate, session, pswap_id_int)
+        await get_or_create_token(substrate, session, vxor_id_int)
         for block in (range if silent or not sys.stdout.isatty() else trange)(
             begin, end
         ):
+            # if BLOCK_IMPORT_LIMIT != 0 and BLOCK_IMPORT_LIMIT is not None:
+            #     if (block - begin + 1) % BLOCK_IMPORT_LIMIT == 0:
+            #         logging.info("Waiting %i seconds to get next block", WAIT_FOR_NEXT_IMPORT)
+            #         await asyncio.sleep(WAIT_FOR_NEXT_IMPORT)
             # get events from <block> to <dataset>
             dataset = []
             try:
@@ -530,6 +541,9 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                 if swap[0] == 2:
                     base_id = KUSD_ID
                     base_id_int = kusd_id_int
+                if swap[0] == 3:
+                    base_id = VXOR_ID
+                    base_id_int = vxor_id_int
                 other_asset = swap[1] if swap[2] == base_id_int else swap[2]
                 other_asset = "{0:#0{1}x}".format(other_asset, 66)
                 if swap[1] == base_id_int:
