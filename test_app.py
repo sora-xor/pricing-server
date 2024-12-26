@@ -2,7 +2,7 @@ import asyncio
 import unittest
 from decimal import Decimal
 from time import time
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 
 from models import Base, Pair, Swap, Token
 from processing import XOR_ID
-from run_node_processing import update_volumes
+from run_node_processing import DENOM, update_all_pairs_liquidity, update_volumes
 from web import app, get_db
 
 SQLALCHEMY_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -54,6 +54,41 @@ class DBTestCase(unittest.TestCase):
 
 
 class ImportTest(DBTestCase):
+    @patch("PoolXYK.substrate.query") 
+    async def test_update_all_pairs_liquidity(self, mock_query):
+        mock_query.side_effect = lambda module, storage_function, params: {
+            (
+                "PoolXYK",
+                "Reserves",
+                [
+                    "0x" + hex(1)[2:].zfill(64),
+                    "0x" + hex(2)[2:].zfill(64),
+                ],
+            ): Mock(value=(1000 * DENOM, 2000 * DENOM)),
+            (
+                "PoolXYK",
+                "Reserves",
+                [
+                    "0x" + hex(2)[2:].zfill(64),
+                    "0x" + hex(1)[2:].zfill(64),
+                ],
+            ): Mock(value=(3000 * DENOM, 4000 * DENOM)),
+        }.get((module, storage_function, params), None)
+
+        async with TestingSessionLocal() as session:
+            dai = Token(id=1, name="D", decimals=18, symbol="DAI")
+            xor = Token(id=2, name="X", decimals=18, symbol="XOR")
+            session.add_all([dai, xor])
+            pair = Pair(from_token=dai, to_token=xor)
+            session.add(pair)
+            await session.commit()
+
+            await update_all_pairs_liquidity(session, substrate=mock_query)
+
+            updated_pair = (await session.execute(select(Pair))).scalar()
+            self.assertEqual(updated_pair.from_token_liquidity, Decimal("4000"))
+            self.assertEqual(updated_pair.to_token_liquidity, Decimal("5000"))
+            
     def test_update_volumes(self):
         async def inner():
             # insert test data
@@ -214,3 +249,26 @@ class WebAppTest(DBTestCase):
                 }
             },
         )
+
+    async def test_tickers_get(self):
+        response = await client.get("/tickers/")
+        assert response.status_code == 200, response.text
+        data = response.json()
+
+        self.assertIsInstance(data, list)
+        self.assertGreater(len(data), 0)
+
+        ticker = data[0]
+        self.assertEqual(ticker["ticker_id"], "0x" + "0" * 63 + "1_" + XOR_ID)
+        self.assertEqual(ticker["base_currency"], "0x" + "0" * 63 + "1")
+        self.assertEqual(ticker["base_name"], "D")
+        self.assertEqual(ticker["base_symbol"], "DAI")
+        self.assertEqual(ticker["target_currency"], XOR_ID)
+        self.assertEqual(ticker["target_name"], "X")
+        self.assertEqual(ticker["target_symbol"], "XOR")
+        self.assertEqual(ticker["last_price"], "0.5") 
+        self.assertEqual(ticker["base_volume"], "1.0")
+        self.assertEqual(ticker["target_volume"], "2.0")
+        self.assertEqual(ticker["liquidity_in_usd"], "1.0")
+        self.assertEqual(ticker["high"], "0.5")
+        self.assertEqual(ticker["low"], "0.5")
