@@ -38,6 +38,8 @@ class Pair(Base):
         foreign_keys=[to_token_id],
         backref=backref("to_pairs", uselist=True, cascade="delete,all"),
     )
+    from_token_liquidity = Column(Numeric())
+    to_token_liquidity = Column(Numeric())
     quote_price = Column(Numeric(), nullable=True)
 
 
