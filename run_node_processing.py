@@ -37,6 +37,8 @@ DENOM = Decimal(10 ** 18)
 
 SWAP_FEE_ASSETS = {}
 
+POLL_INTERVAL = 30
+
 # BLOCK_IMPORT_LIMIT = 10 # In blocks, 0, None or float("inf") - to not stop
 
 # WAIT_FOR_NEXT_IMPORT = 4 # In seconds
@@ -633,7 +635,7 @@ async def async_main_loop(async_session, args):
         await async_main(async_session, args.begin, args.clean, args.silent)
         if not args.silent:
             logging.info("Waiting for new blocks...")
-        await asyncio.sleep(decouple.config("POLL_INTERVAL", default=600, cast=int))
+        await asyncio.sleep(decouple.config("POLL_INTERVAL", default=POLL_INTERVAL, cast=int))
 
 
 if __name__ == "__main__":
