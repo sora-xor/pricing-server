@@ -390,8 +390,8 @@ async def tickers(session=Depends(get_db)):
 
         if rev_id in pairs:
             liquidity_in_dai = pairs[rev_id]["liquidity_in_usd"] = max(FormattedFloat(liquidity_in_dai), pairs[rev_id]["liquidity_in_usd"])
-            quote_volume = pairs[rev_id]["base_volume"] = pairs[rev_id]["base_volume"] + FormattedFloat(quote_volume)
-            base_volume = pairs[rev_id]["target_volume"] = pairs[rev_id]["target_volume"] + FormattedFloat(base_volume)
+            quote_volume = pairs[rev_id]["base_volume"] = pairs[rev_id]["base_volume"] + FormattedFloat(quote_volume or 0)
+            base_volume = pairs[rev_id]["target_volume"] = pairs[rev_id]["target_volume"] + FormattedFloat(base_volume or 0)
         if id in pairs:
             # sum up buying and sellling volumes
             if base_volume:
