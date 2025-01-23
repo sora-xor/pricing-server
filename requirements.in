@@ -7,7 +7,9 @@ graphene-sqlalchemy
 gunicorn
 python-decouple
 scalecodec
-sqlalchemy
+sqlalchemy==1.4.37
 substrate-interface
 tqdm
 uvicorn
+starlette==0.14.2
+greenlet
