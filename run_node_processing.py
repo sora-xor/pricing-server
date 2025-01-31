@@ -37,6 +37,8 @@ DENOM = Decimal(10 ** 18)
 
 SWAP_FEE_ASSETS = {}
 
+POLL_INTERVAL = 30
+
 # BLOCK_IMPORT_LIMIT = 10 # In blocks, 0, None or float("inf") - to not stop
 
 # WAIT_FOR_NEXT_IMPORT = 4 # In seconds
@@ -193,6 +195,44 @@ async def get_all_pairs(session):
         pairs[p.from_token.id, p.to_token.id] = p
     return pairs
 
+async def update_all_pairs_liquidity(session, substrate):
+    try:
+        result = await session.execute(select(Pair))
+
+        pairs = result.scalars().all() 
+
+        for pair in pairs:
+            result = substrate.query(
+                module="PoolXYK",
+                storage_function="Reserves",
+                params=[
+                    "0x" + hex(int(pair.from_token_id))[2:].zfill(64),
+                    "0x" + hex(int(pair.to_token_id))[2:].zfill(64),
+                ],
+            )
+
+            result_rev = substrate.query(
+                module="PoolXYK",
+                storage_function="Reserves",
+                params=[
+                    "0x" + hex(int(pair.to_token_id))[2:].zfill(64),
+                    "0x" + hex(int(pair.from_token_id))[2:].zfill(64),
+                ],
+            )
+
+            if result:
+                liquidity_from, liquidity_to = result.value
+                pair.from_token_liquidity = liquidity_from / DENOM
+                pair.to_token_liquidity = liquidity_to / DENOM
+            if result_rev:
+                liquidity_to, liquidity_from = result_rev.value
+                pair.from_token_liquidity += liquidity_from / DENOM
+                pair.to_token_liquidity += liquidity_to / DENOM
+
+        await session.commit()
+    except Exception as e:
+        await session.rollback()
+        logging.error(f"Error updating liquidity for all pairs: {e}")
 
 async def update_volumes(session):
     """
@@ -584,6 +624,7 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
         if not silent:
             logging.info("Updating trade volumes...")
         await update_volumes(session)
+        await update_all_pairs_liquidity(session, substrate)
 
 
 async def async_main_loop(async_session, args):
@@ -594,7 +635,7 @@ async def async_main_loop(async_session, args):
         await async_main(async_session, args.begin, args.clean, args.silent)
         if not args.silent:
             logging.info("Waiting for new blocks...")
-        await asyncio.sleep(decouple.config("POLL_INTERVAL", default=600, cast=int))
+        await asyncio.sleep(decouple.config("POLL_INTERVAL", default=POLL_INTERVAL, cast=int))
 
 
 if __name__ == "__main__":

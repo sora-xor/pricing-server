@@ -1,0 +1,27 @@
+version: "3.4"
+volumes:
+  chain:
+
+services:
+  postgres:
+    image: postgres
+    environment:
+      POSTGRES_DB: "${DB_NAME}"
+      POSTGRES_USER: "${DB_USER}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD}"
+    ports:
+      - "127.0.0.1:5432:5432"
+  import:
+    build: .
+    depends_on:
+      - "postgres"
+    command: 
+      sh -c "sleep 1 &&
+      env SUBSTRATE_URL=${SUBSTRATE_URL} DATABASE_URL=postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@postgres/${DB_NAME} sh start.sh"
+  web:
+    build: .
+    depends_on:
+      - "postgres"
+    ports:
+      - "8000:8000"
+    command: "env DATABASE_URL=postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@postgres/${DB_NAME} gunicorn -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0 web:app"
