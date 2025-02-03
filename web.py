@@ -11,10 +11,9 @@ from fastapi.responses import HTMLResponse
 from graphene import Enum, Int, String
 from graphene_sqlalchemy import SQLAlchemyObjectType
 from graphql.execution.executors.asyncio import AsyncioExecutor
-from pydantic import BaseModel, Field
 from sqlalchemy import and_, desc, or_, func, cast, Numeric
 from sqlalchemy.future import select
-from sqlalchemy.orm import selectinload, aliased
+from sqlalchemy.orm import selectinload, joinedload
 from starlette.graphql import GraphQLApp
 from starlette.responses import JSONResponse
 
@@ -194,7 +193,9 @@ class Query(graphene.ObjectType):
 
 
 app = FastAPI()
-
+# logger = logging.getLogger(__name__)
+# logger.setLevel(logging.INFO)
+# logger.addHandler(logging.StreamHandler())
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
@@ -331,33 +332,27 @@ async def tickers(session=Depends(get_db)):
     kusd_id_int = int(KUSD_ID, 16)
     vxor_id_int = int(VXOR_ID, 16)
     prices_in_dai = await get_last_prices_in_dai(session, [xor_id_int, xstusd_id_int, kusd_id_int, vxor_id_int])
-
-    # fetch all pairs info
-    # select last swap for each pair in subquery to obtain price
-    for p, last_price, high_price, low_price in await session.execute(
+    get_pairs_prices_query = (
         select(
             Pair,
-            select(Swap.to_amount / Swap.from_amount)
-            .where(Swap.pair_id == Pair.id)
-            .order_by(Swap.timestamp.desc())
-            .limit(1)
-            .scalar_subquery(),
-            # highest price 24h
-            select(func.max(Swap.to_amount / Swap.from_amount))
-            .where(
-                Swap.pair_id == Pair.id,
-                Swap.timestamp >= last_24h,
-            )
-            .scalar_subquery(),
-            # lowest price 24h
-            select(func.min(Swap.to_amount / Swap.from_amount))
-            .where(
-                Swap.pair_id == Pair.id,
-                Swap.timestamp >= last_24h,
-            )
-            .scalar_subquery(),
-        ).options(selectinload(Pair.from_token), selectinload(Pair.to_token))
-    ):
+            Swap.to_amount / Swap.from_amount.label("last_price"),
+            func.max(Swap.to_amount / Swap.from_amount).over(
+                partition_by=Swap.pair_id
+            ).label("high_price"),
+            func.min(Swap.to_amount / Swap.from_amount).over(
+                partition_by=Swap.pair_id
+            ).label("low_price"),
+        )
+        .join(Swap, Swap.pair_id == Pair.id)
+        .where(Swap.timestamp >= last_24h)
+        .distinct(Pair.id)
+        .order_by(Pair.id, Swap.timestamp.desc())
+        .options(joinedload(Pair.from_token), joinedload(Pair.to_token))
+    )
+    request_result = await session.execute(get_pairs_prices_query)
+    # fetch all pairs info
+    # select last swap for each pair in subquery to obtain price
+    for p, last_price, high_price, low_price in request_result.unique():
         # there are separate pairs for selling and buying XOR
         # need to sum them to calculate total volumes
         if p.from_token_id == xor_id_int or p.from_token_id == xstusd_id_int \
