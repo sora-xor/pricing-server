@@ -195,50 +195,49 @@ async def get_all_pairs(session):
         pairs[p.from_token.id, p.to_token.id] = p
     return pairs
 
-async def update_all_pairs_liquidity(session, substrate):
-    try:
-        result = await session.execute(select(Pair))
+async def update_all_pairs_liquidity(session, substrate, last_24h):
+    """
+    Update Pair.from_token_liquidity and Pair.to_token_liquidity.
+    Session not commited.
+    """
+    query = select(Pair)
 
-        pairs = result.scalars().all() 
+    result = await session.execute(query)
+    result_pairs = result.scalars().all()
 
-        for pair in pairs:
-            result = substrate.query(
-                module="PoolXYK",
-                storage_function="Reserves",
-                params=[
-                    "0x" + hex(int(pair.from_token_id))[2:].zfill(64),
-                    "0x" + hex(int(pair.to_token_id))[2:].zfill(64),
-                ],
-            )
+    for pair in result_pairs:
+        result = substrate.query(
+            module="PoolXYK",
+            storage_function="Reserves",
+            params=[
+                "0x" + hex(int(pair.from_token_id))[2:].zfill(64),
+                "0x" + hex(int(pair.to_token_id))[2:].zfill(64),
+            ],
+        )
 
-            result_rev = substrate.query(
-                module="PoolXYK",
-                storage_function="Reserves",
-                params=[
-                    "0x" + hex(int(pair.to_token_id))[2:].zfill(64),
-                    "0x" + hex(int(pair.from_token_id))[2:].zfill(64),
-                ],
-            )
+        result_rev = substrate.query(
+            module="PoolXYK",
+            storage_function="Reserves",
+            params=[
+                "0x" + hex(int(pair.to_token_id))[2:].zfill(64),
+                "0x" + hex(int(pair.from_token_id))[2:].zfill(64),
+            ],
+        )
 
-            if result:
-                liquidity_from, liquidity_to = result.value
-                pair.from_token_liquidity = liquidity_from / DENOM
-                pair.to_token_liquidity = liquidity_to / DENOM
-            if result_rev:
-                liquidity_to, liquidity_from = result_rev.value
-                pair.from_token_liquidity += liquidity_from / DENOM
-                pair.to_token_liquidity += liquidity_to / DENOM
+        if result:
+            liquidity_from, liquidity_to = result.value
+            pair.from_token_liquidity = liquidity_from / DENOM
+            pair.to_token_liquidity = liquidity_to / DENOM
+        if result_rev:
+            liquidity_to, liquidity_from = result_rev.value
+            pair.from_token_liquidity += liquidity_from / DENOM
+            pair.to_token_liquidity += liquidity_to / DENOM
 
-        await session.commit()
-    except Exception as e:
-        await session.rollback()
-        logging.error(f"Error updating liquidity for all pairs: {e}")
-
-async def update_volumes(session):
+async def update_volumes(session, last_24h):
     """
     Update Pair.from_volume, Pair.to_volume and Token.trade_volume.
+    Session not commited.
     """
-    last_24h = (time() - 24 * 3600) * 1000
     from_amounts = session.execute(
         select(Pair.from_token_id, func.sum(Swap.from_amount))
         .where(Swap.timestamp > last_24h)
@@ -287,7 +286,6 @@ async def update_volumes(session):
             .scalar_subquery(),
         )
     )
-    await session.commit()
 
 
 def get_event_param(event, param_idx):
@@ -623,8 +621,10 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
             await pending
         if not silent:
             logging.info("Updating trade volumes...")
-        await update_volumes(session)
-        await update_all_pairs_liquidity(session, substrate)
+        last_24h = (time() - 24 * 3600) * 1000
+        await update_volumes(session, last_24h)
+        await update_all_pairs_liquidity(session, substrate, last_24h)
+        await session.commit()
 
 
 async def async_main_loop(async_session, args):
