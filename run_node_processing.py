@@ -37,7 +37,7 @@ DENOM = Decimal(10 ** 18)
 
 SWAP_FEE_ASSETS = {}
 
-POLL_INTERVAL = 30
+POLL_INTERVAL = 60
 
 # BLOCK_IMPORT_LIMIT = 10 # In blocks, 0, None or float("inf") - to not stop
 
