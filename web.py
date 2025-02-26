@@ -14,6 +14,7 @@ from graphql.execution.executors.asyncio import AsyncioExecutor
 from sqlalchemy import and_, desc, or_, func, cast, Numeric
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload, joinedload
+from sqlalchemy.sql.expression import lateral
 from starlette.graphql import GraphQLApp
 from starlette.responses import JSONResponse
 
@@ -52,16 +53,25 @@ async def get_db():
 async def get_last_prices_in_dai(session, token_ids: list):
     dai_id_int = int(DAI_ID, 16)
 
+    latest_swap = lateral(
+        select(
+            Swap.to_amount,
+            Swap.from_amount
+        )
+        .where(Swap.pair_id == Pair.id)
+        .order_by(Swap.timestamp.desc())
+        .limit(1)
+    )
+
     result = await session.execute(
         select(
             Pair.from_token_id,
-            (Swap.to_amount / Swap.from_amount).label("last_price"),
+            (latest_swap.c.to_amount / latest_swap.c.from_amount).label("last_price"),
             Pair.quote_price
         )
-        .join(Pair, Swap.pair_id == Pair.id)
+        .join(latest_swap, onclause=True)  # LATERAL JOIN
         .where(Pair.from_token_id.in_([cast(id, Numeric(80)) for id in token_ids]))
         .where(Pair.to_token_id == cast(dai_id_int, Numeric(80)))
-        .order_by(Swap.timestamp.desc())
     )
 
     token_prices = {row[0]: row[2] or row[1] for row in result.all()}
@@ -75,13 +85,12 @@ async def get_last_prices_in_dai(session, token_ids: list):
         result = await session.execute(
             select(
                 Pair.from_token_id,
-                (Swap.to_amount / Swap.from_amount).label("last_price"),
+                (latest_swap.c.to_amount / latest_swap.c.from_amount).label("last_price"),
                 Pair.quote_price
             )
-            .join(Pair, Swap.pair_id == Pair.id)
+            .join(latest_swap, onclause=True)  # LATERAL JOIN
             .where(Pair.from_token_id.in_([cast(id, Numeric(80)) for id in missing_tokens]))
             .where(Pair.to_token_id == cast(XOR_ID_INT, Numeric(80)))
-            .order_by(Swap.timestamp.desc())
         )
 
         for row in result.all():
@@ -352,7 +361,7 @@ async def tickers(session=Depends(get_db)):
 
     # fetch all pairs info
     # select last swap for each pair in subquery to obtain price
-    for p, last_price, high_price, low_price in request_result.unique():
+    for p, last_price, high_price, low_price in request_result:
         # there are separate pairs for selling and buying XOR
         # need to sum them to calculate total volumes
         if p.from_token_id == XOR_ID_INT or p.from_token_id == XSTUSD_ID_INT \
