@@ -74,7 +74,7 @@ async def get_last_prices_in_dai(session, token_ids: list):
         .where(Pair.to_token_id == cast(dai_id_int, Numeric(80)))
     )
 
-    token_prices = {row[0]: row[2] or row[1] for row in result.all()}
+    token_prices = {row[0]: row[2] or row[1] or 0 for row in result.all()}
 
     xor_price_in_dai = token_prices.get(XOR_ID_INT, 0)
 
@@ -94,7 +94,7 @@ async def get_last_prices_in_dai(session, token_ids: list):
         )
 
         for row in result.all():
-            token_prices[row[0]] = (row[2] or row[1]) * xor_price_in_dai
+            token_prices[row[0]] = (row[2] or row[1] or 0) * xor_price_in_dai
 
     return {token_id: token_prices.get(token_id, 0) for token_id in token_ids}
 
@@ -377,7 +377,8 @@ async def tickers(session=Depends(get_db)):
             # reverse price
             if last_price:
                 last_price = 1 / last_price
-            liquidity_in_dai = ((p.from_token_liquidity or 0) + (p.to_token_liquidity or 0) * (last_price or p.quote_price)) * prices_in_dai[p.from_token_id]
+            liquidity_in_dai = ((p.from_token_liquidity or 0) + (p.to_token_liquidity or 0) * (quote_price or last_price or 0))\
+                * prices_in_dai[p.from_token_id]
             if low_price or high_price:
                 high_price, low_price = (1 / low_price if low_price else None, 
                                          1 / high_price if high_price else None)
@@ -387,7 +388,8 @@ async def tickers(session=Depends(get_db)):
             quote = p.to_token
             quote_volume = p.to_volume
             quote_price = p.quote_price
-            liquidity_in_dai = ((p.from_token_liquidity or 0) * (last_price or p.quote_price) + (p.to_token_liquidity or 0)) * prices_in_dai[p.to_token_id]
+            liquidity_in_dai = ((p.from_token_liquidity or 0) * (quote_price or last_price or 0) + (p.to_token_liquidity or 0))\
+                * prices_in_dai[p.to_token_id]
 
         id = base.hash + "_" + quote.hash
         rev_id = quote.hash + "_" + base.hash
@@ -399,9 +401,9 @@ async def tickers(session=Depends(get_db)):
         if id in pairs:
             # sum up buying and sellling volumes
             if base_volume:
-                pairs[id]["base_volume"] += FormattedFloat(base_volume)
+                pairs[id]["base_volume"] += FormattedFloat(base_volume or 0)
             if quote_volume:
-                pairs[id]["target_volume"] += FormattedFloat(quote_volume)
+                pairs[id]["target_volume"] += FormattedFloat(quote_volume or 0)
         elif (quote_price is None and last_price == 0) or (last_price is None and quote_price == 0) or \
             (last_price is None and quote_price is None):
             continue
