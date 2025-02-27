@@ -14,7 +14,7 @@ from graphql.execution.executors.asyncio import AsyncioExecutor
 from sqlalchemy import and_, desc, or_, func, cast, Numeric
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload, joinedload
-from sqlalchemy.sql.expression import lateral
+from sqlalchemy.sql.expression import lateral, cte
 from starlette.graphql import GraphQLApp
 from starlette.responses import JSONResponse
 
@@ -339,25 +339,39 @@ async def tickers(session=Depends(get_db)):
     last_24h = (time() - 24 * 3600) * 1000
     prices_in_dai = await get_last_prices_in_dai(session, [XOR_ID_INT, XSTUSD_ID_INT, KUSD_ID_INT, VXOR_ID_INT])
 
-    latest_swap = (
+    swap_stats = cte(
         select(
-                Swap.pair_id,
-                (Swap.to_amount / Swap.from_amount).label("last_price"),
-                func.max(Swap.to_amount / Swap.from_amount).over(partition_by=Swap.pair_id).label("high_price"),
-                func.min(Swap.to_amount / Swap.from_amount).over(partition_by=Swap.pair_id).label("low_price"),
-                Swap.timestamp
-            )
-            .where(Swap.timestamp >= last_24h)
-            .order_by(Swap.pair_id, Swap.timestamp.desc())
-            .distinct(Swap.pair_id)
-            .subquery()
+            Swap.pair_id,
+            func.max(Swap.to_amount / Swap.from_amount).label("high_price"),
+            func.min(Swap.to_amount / Swap.from_amount).label("low_price")
+        )
+        .where(Swap.timestamp >= last_24h)
+        .group_by(Swap.pair_id)
     )
-    get_pairs_prices_query = (
-        select(Pair, latest_swap.c.last_price, latest_swap.c.high_price, latest_swap.c.low_price)
-        .join(latest_swap, latest_swap.c.pair_id == Pair.id, isouter = True)
+
+    latest_swap = lateral(
+        select(
+            (Swap.to_amount / Swap.from_amount).label("last_price")
+        )
+        .where(Swap.pair_id == Pair.id)
+        .order_by(Swap.timestamp.desc())
+        .limit(1)
+    )
+
+    query = (
+        select(
+            Pair,
+            latest_swap.c.last_price,
+            swap_stats.c.high_price,
+            swap_stats.c.low_price
+        )
+        .select_from(Pair)
+        .join(latest_swap, onclause=True)  # LATERAL JOIN
+        .join(swap_stats, swap_stats.c.pair_id == Pair.id, isouter=True)
         .options(joinedload(Pair.from_token), joinedload(Pair.to_token))
     )
-    request_result = await session.execute(get_pairs_prices_query)
+
+    request_result = await session.execute(query)
 
     # fetch all pairs info
     # select last swap for each pair in subquery to obtain price
@@ -382,7 +396,8 @@ async def tickers(session=Depends(get_db)):
             if low_price or high_price:
                 high_price, low_price = (1 / low_price if low_price else None, 
                                          1 / high_price if high_price else None)
-        else:
+        elif p.to_token_id == XOR_ID_INT or p.to_token_id == XSTUSD_ID_INT \
+              or p.to_token_id == KUSD_ID_INT or p.to_token_id == VXOR_ID_INT:
             base = p.from_token
             base_volume = p.from_volume
             quote = p.to_token
@@ -390,6 +405,8 @@ async def tickers(session=Depends(get_db)):
             quote_price = p.quote_price
             liquidity_in_dai = ((p.from_token_liquidity or 0) * (quote_price or last_price or 0) + (p.to_token_liquidity or 0))\
                 * prices_in_dai[p.to_token_id]
+        else:
+            continue
 
         id = base.hash + "_" + quote.hash
         rev_id = quote.hash + "_" + base.hash
