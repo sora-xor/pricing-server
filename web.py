@@ -19,7 +19,7 @@ from starlette.graphql import GraphQLApp
 from starlette.responses import JSONResponse
 
 from models import Burn, BuyBack, Pair, Swap, Token
-from processing import XOR_ID, XSTUSD_ID, KUSD_ID, VXOR_ID, DAI_ID
+from processing import XOR_ID, XSTUSD_ID, KUSD_ID, VXOR_ID, DAI_ID, XST_ID
 
 WHITELIST_URL = "https://raw.githubusercontent.com/sora-xor/polkaswap-token-whitelist-config/master/whitelist.json"  # noqa
 
@@ -27,6 +27,7 @@ XOR_ID_INT = int(XOR_ID, 16)
 XSTUSD_ID_INT = int(XSTUSD_ID, 16)
 KUSD_ID_INT = int(KUSD_ID, 16)
 VXOR_ID_INT = int(VXOR_ID, 16)
+XST_ID_INT = int(XST_ID, 16)
 
 __cache = {}
 
@@ -337,7 +338,7 @@ async def tickers(session=Depends(get_db)):
     """
     pairs = {}
     last_24h = (time() - 24 * 3600) * 1000
-    prices_in_dai = await get_last_prices_in_dai(session, [XOR_ID_INT, XSTUSD_ID_INT, KUSD_ID_INT, VXOR_ID_INT])
+    prices_in_dai = await get_last_prices_in_dai(session, [XOR_ID_INT, XSTUSD_ID_INT, KUSD_ID_INT, VXOR_ID_INT, XST_ID_INT])
 
     swap_stats = cte(
         select(
@@ -379,7 +380,8 @@ async def tickers(session=Depends(get_db)):
         # there are separate pairs for selling and buying XOR
         # need to sum them to calculate total volumes
         if p.from_token_id == XOR_ID_INT or p.from_token_id == XSTUSD_ID_INT \
-              or p.from_token_id == KUSD_ID_INT or p.from_token_id == VXOR_ID_INT:
+              or p.from_token_id == KUSD_ID_INT or p.from_token_id == VXOR_ID_INT \
+                or p.from_token_id == XST_ID_INT:
             # <p> contains XOR->XXX swaps
             base = p.to_token
             base_volume = p.to_volume
@@ -397,7 +399,8 @@ async def tickers(session=Depends(get_db)):
                 high_price, low_price = (1 / low_price if low_price else None, 
                                          1 / high_price if high_price else None)
         elif p.to_token_id == XOR_ID_INT or p.to_token_id == XSTUSD_ID_INT \
-              or p.to_token_id == KUSD_ID_INT or p.to_token_id == VXOR_ID_INT:
+              or p.to_token_id == KUSD_ID_INT or p.to_token_id == VXOR_ID_INT \
+                or p.to_token_id == XST_ID_INT:
             base = p.from_token
             base_volume = p.from_volume
             quote = p.to_token
