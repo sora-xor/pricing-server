@@ -437,8 +437,8 @@ async def tickers(session=Depends(get_db)):
                 "base_volume": FormattedFloat(base_volume or 0),
                 "target_volume": FormattedFloat(quote_volume or 0),
                 "liquidity_in_usd": FormattedFloat(liquidity_in_dai),
-                "high": FormattedFloat(high_price or quote_price or 0),
-                "low": FormattedFloat(low_price or quote_price or 0),
+                "high": FormattedFloat(high_price or 0),
+                "low": FormattedFloat(low_price or 0),
             }
     return FormattedJSONResponse(list(pairs.values()))
 
