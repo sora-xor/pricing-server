@@ -11,17 +11,23 @@ from fastapi.responses import HTMLResponse
 from graphene import Enum, Int, String
 from graphene_sqlalchemy import SQLAlchemyObjectType
 from graphql.execution.executors.asyncio import AsyncioExecutor
-from pydantic import BaseModel, Field
 from sqlalchemy import and_, desc, or_, func, cast, Numeric
 from sqlalchemy.future import select
-from sqlalchemy.orm import selectinload, aliased
+from sqlalchemy.orm import selectinload, joinedload
+from sqlalchemy.sql.expression import lateral, cte
 from starlette.graphql import GraphQLApp
 from starlette.responses import JSONResponse
 
 from models import Burn, BuyBack, Pair, Swap, Token
-from processing import XOR_ID, XSTUSD_ID, KUSD_ID, VXOR_ID, DAI_ID
+from processing import XOR_ID, XSTUSD_ID, KUSD_ID, VXOR_ID, DAI_ID, XST_ID
 
 WHITELIST_URL = "https://raw.githubusercontent.com/sora-xor/polkaswap-token-whitelist-config/master/whitelist.json"  # noqa
+
+XOR_ID_INT = int(XOR_ID, 16)
+XSTUSD_ID_INT = int(XSTUSD_ID, 16)
+KUSD_ID_INT = int(KUSD_ID, 16)
+VXOR_ID_INT = int(VXOR_ID, 16)
+XST_ID_INT = int(XST_ID, 16)
 
 __cache = {}
 
@@ -45,45 +51,53 @@ async def get_db():
     async with async_session() as session:
         yield session
 
-async def get_last_price(session, base_token: int, target_token: int):
+async def get_last_prices_in_dai(session, token_ids: list):
+    dai_id_int = int(DAI_ID, 16)
+
+    latest_swap = lateral(
+        select(
+            Swap.to_amount,
+            Swap.from_amount
+        )
+        .where(Swap.pair_id == Pair.id)
+        .order_by(Swap.timestamp.desc())
+        .limit(1)
+    )
+
     result = await session.execute(
+        select(
+            Pair.from_token_id,
+            (latest_swap.c.to_amount / latest_swap.c.from_amount).label("last_price"),
+            Pair.quote_price
+        )
+        .join(latest_swap, onclause=True)  # LATERAL JOIN
+        .where(Pair.from_token_id.in_([cast(id, Numeric(80)) for id in token_ids]))
+        .where(Pair.to_token_id == cast(dai_id_int, Numeric(80)))
+    )
+
+    token_prices = {row[0]: row[2] or row[1] or 0 for row in result.all()}
+
+    xor_price_in_dai = token_prices.get(XOR_ID_INT, 0)
+
+    # If a token doesn't have a direct DAI price, try fetching from XOR
+    missing_tokens = [t for t in token_ids if t not in token_prices]
+
+    if missing_tokens and xor_price_in_dai:
+        result = await session.execute(
             select(
-                Swap.to_amount / Swap.from_amount,
+                Pair.from_token_id,
+                (latest_swap.c.to_amount / latest_swap.c.from_amount).label("last_price"),
                 Pair.quote_price
             )
-            .join(Pair, Swap.pair_id == Pair.id)
-            .where(
-                (Pair.from_token_id == cast(base_token, Numeric(80))) & (Pair.to_token_id == cast(target_token, Numeric(80)))
-            )
-            .order_by(Swap.timestamp.desc())
-            .limit(1)
+            .join(latest_swap, onclause=True)  # LATERAL JOIN
+            .where(Pair.from_token_id.in_([cast(id, Numeric(80)) for id in missing_tokens]))
+            .where(Pair.to_token_id == cast(XOR_ID_INT, Numeric(80)))
         )
 
-    return result.first()
+        for row in result.all():
+            token_prices[row[0]] = (row[2] or row[1] or 0) * xor_price_in_dai
 
-async def get_last_prices_in_dai(session, token_ids: list):
-    prices = {}
-
-    dai_id_int = int(DAI_ID, 16)
-    xor_id_int = int(XOR_ID, 16)
-
-    for token_id_int in token_ids:
-        value = await get_last_price(session, token_id_int, dai_id_int)
-
-        if value:
-            last_price, quote_price = value
-            prices[token_id_int] = last_price or quote_price
-        # try get from XOR
-        else:
-            value = await get_last_price(session, token_id_int, xor_id_int)
-            if value:
-                last_price, quote_price = value
-                prices[token_id_int] = (last_price or quote_price) * prices[xor_id_int]
-            else:
-                prices[token_id_int] = 0
-    
-    return prices
-
+    return {token_id: token_prices.get(token_id, 0) for token_id in token_ids}
 
 class TokenType(SQLAlchemyObjectType):
     class Meta:
@@ -194,7 +208,9 @@ class Query(graphene.ObjectType):
 
 
 app = FastAPI()
-
+# logger = logging.getLogger(__name__)
+# logger.setLevel(logging.INFO)
+# logger.addHandler(logging.StreamHandler())
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
@@ -255,10 +271,6 @@ async def pairs(session=Depends(get_db)):
     Returns information on pairs.
     """
     pairs = {}
-    xor_id_int = int(XOR_ID, 16)
-    xstusd_id_int = int(XSTUSD_ID, 16)
-    kusd_id_int = int(KUSD_ID, 16)
-    vxor_id_int = int(VXOR_ID, 16)
     # fetch all pairs info
     # select last swap for each pair in subquery to obtain price
     for p, last_price in await session.execute(
@@ -273,8 +285,8 @@ async def pairs(session=Depends(get_db)):
     ):
         # there are separate pairs for selling and buying XOR
         # need to sum them to calculate total volumes
-        if p.from_token_id == xor_id_int or p.from_token_id == xstusd_id_int \
-              or p.from_token_id == kusd_id_int or p.from_token_id == vxor_id_int:
+        if p.from_token_id == XOR_ID_INT or p.from_token_id == XSTUSD_ID_INT \
+              or p.from_token_id == KUSD_ID_INT or p.from_token_id == VXOR_ID_INT:
             # <p> contains XOR->XXX swaps
             base = p.to_token
             base_volume = p.to_volume
@@ -326,42 +338,50 @@ async def tickers(session=Depends(get_db)):
     """
     pairs = {}
     last_24h = (time() - 24 * 3600) * 1000
-    xor_id_int = int(XOR_ID, 16)
-    xstusd_id_int = int(XSTUSD_ID, 16)
-    kusd_id_int = int(KUSD_ID, 16)
-    vxor_id_int = int(VXOR_ID, 16)
-    prices_in_dai = await get_last_prices_in_dai(session, [xor_id_int, xstusd_id_int, kusd_id_int, vxor_id_int])
+    prices_in_dai = await get_last_prices_in_dai(session, [XOR_ID_INT, XSTUSD_ID_INT, KUSD_ID_INT, VXOR_ID_INT, XST_ID_INT])
+
+    swap_stats = cte(
+        select(
+            Swap.pair_id,
+            func.max(Swap.to_amount / Swap.from_amount).label("high_price"),
+            func.min(Swap.to_amount / Swap.from_amount).label("low_price")
+        )
+        .where(Swap.timestamp >= last_24h)
+        .group_by(Swap.pair_id)
+    )
+
+    latest_swap = lateral(
+        select(
+            (Swap.to_amount / Swap.from_amount).label("last_price")
+        )
+        .where(Swap.pair_id == Pair.id)
+        .order_by(Swap.timestamp.desc())
+        .limit(1)
+    )
+
+    query = (
+        select(
+            Pair,
+            latest_swap.c.last_price,
+            swap_stats.c.high_price,
+            swap_stats.c.low_price
+        )
+        .select_from(Pair)
+        .join(latest_swap, onclause=True)  # LATERAL JOIN
+        .join(swap_stats, swap_stats.c.pair_id == Pair.id, isouter=True)
+        .options(joinedload(Pair.from_token), joinedload(Pair.to_token))
+    )
+
+    request_result = await session.execute(query)
 
     # fetch all pairs info
     # select last swap for each pair in subquery to obtain price
-    for p, last_price, high_price, low_price in await session.execute(
-        select(
-            Pair,
-            select(Swap.to_amount / Swap.from_amount)
-            .where(Swap.pair_id == Pair.id)
-            .order_by(Swap.timestamp.desc())
-            .limit(1)
-            .scalar_subquery(),
-            # highest price 24h
-            select(func.max(Swap.to_amount / Swap.from_amount))
-            .where(
-                Swap.pair_id == Pair.id,
-                Swap.timestamp >= last_24h,
-            )
-            .scalar_subquery(),
-            # lowest price 24h
-            select(func.min(Swap.to_amount / Swap.from_amount))
-            .where(
-                Swap.pair_id == Pair.id,
-                Swap.timestamp >= last_24h,
-            )
-            .scalar_subquery(),
-        ).options(selectinload(Pair.from_token), selectinload(Pair.to_token))
-    ):
+    for p, last_price, high_price, low_price in request_result:
         # there are separate pairs for selling and buying XOR
         # need to sum them to calculate total volumes
-        if p.from_token_id == xor_id_int or p.from_token_id == xstusd_id_int \
-              or p.from_token_id == kusd_id_int or p.from_token_id == vxor_id_int:
+        if p.from_token_id == XOR_ID_INT or p.from_token_id == XSTUSD_ID_INT \
+              or p.from_token_id == KUSD_ID_INT or p.from_token_id == VXOR_ID_INT \
+                or p.from_token_id == XST_ID_INT:
             # <p> contains XOR->XXX swaps
             base = p.to_token
             base_volume = p.to_volume
@@ -373,17 +393,23 @@ async def tickers(session=Depends(get_db)):
             # reverse price
             if last_price:
                 last_price = 1 / last_price
-            liquidity_in_dai = ((p.from_token_liquidity or 0) + (p.to_token_liquidity or 0) * (last_price or p.quote_price)) * prices_in_dai[p.from_token_id]
+            liquidity_in_dai = ((p.from_token_liquidity or 0) + (p.to_token_liquidity or 0) * (quote_price or last_price or 0))\
+                * prices_in_dai[p.from_token_id]
             if low_price or high_price:
                 high_price, low_price = (1 / low_price if low_price else None, 
                                          1 / high_price if high_price else None)
-        else:
+        elif p.to_token_id == XOR_ID_INT or p.to_token_id == XSTUSD_ID_INT \
+              or p.to_token_id == KUSD_ID_INT or p.to_token_id == VXOR_ID_INT \
+                or p.to_token_id == XST_ID_INT:
             base = p.from_token
             base_volume = p.from_volume
             quote = p.to_token
             quote_volume = p.to_volume
             quote_price = p.quote_price
-            liquidity_in_dai = ((p.from_token_liquidity or 0) * (last_price or p.quote_price) + (p.to_token_liquidity or 0)) * prices_in_dai[p.to_token_id]
+            liquidity_in_dai = ((p.from_token_liquidity or 0) * (quote_price or last_price or 0) + (p.to_token_liquidity or 0))\
+                * prices_in_dai[p.to_token_id]
+        else:
+            continue
 
         id = base.hash + "_" + quote.hash
         rev_id = quote.hash + "_" + base.hash
@@ -395,9 +421,9 @@ async def tickers(session=Depends(get_db)):
         if id in pairs:
             # sum up buying and sellling volumes
             if base_volume:
-                pairs[id]["base_volume"] += FormattedFloat(base_volume)
+                pairs[id]["base_volume"] += FormattedFloat(base_volume or 0)
             if quote_volume:
-                pairs[id]["target_volume"] += FormattedFloat(quote_volume)
+                pairs[id]["target_volume"] += FormattedFloat(quote_volume or 0)
         elif (quote_price is None and last_price == 0) or (last_price is None and quote_price == 0) or \
             (last_price is None and quote_price is None):
             continue
@@ -414,8 +440,8 @@ async def tickers(session=Depends(get_db)):
                 "base_volume": FormattedFloat(base_volume or 0),
                 "target_volume": FormattedFloat(quote_volume or 0),
                 "liquidity_in_usd": FormattedFloat(liquidity_in_dai),
-                "high": FormattedFloat(high_price or quote_price),
-                "low": FormattedFloat(low_price or quote_price),
+                "high": FormattedFloat(high_price or 0),
+                "low": FormattedFloat(low_price or 0),
             }
     return FormattedJSONResponse(list(pairs.values()))
 

@@ -123,7 +123,9 @@ class ImportTest(DBTestCase):
                 session.add(swap)
                 await session.commit()
                 # call update_volumes()
-                await update_volumes(session)
+                last_24h = (time() - 24 * 3600) * 1000
+                await update_volumes(session, last_24h)
+                await session.commit()
                 # check volume columns filled
                 pair = (await session.execute(select(Pair))).scalar()
                 self.assertEqual(pair.from_volume, Decimal("0.2"))
