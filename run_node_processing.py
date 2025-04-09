@@ -613,7 +613,12 @@ async def async_main(async_session, begin=1, clean=False, silent=False, denomina
                 result = substrate.rpc_request("liquidityProxy_quote", params)
                 pair = pairs[swap[1], swap[2]]
                 if result["result"] is not None:
-                    pair.quote_price = int(result["result"]["amount_without_impact"]) / DENOM
+                    if block >= denominate_block and input_asset_id == XOR_ID and output_asset_id != TBCD_ID_INT:
+                        pair.quote_price = int(result["result"]["amount_without_impact"]) / (DENOM * DENOMINATION_FACTOR)
+                    elif block >= denominate_block and (output_asset_id == XOR_ID or output_asset_id == TBCD_ID_INT):
+                        pair.quote_price = int(result["result"]["amount_without_impact"]) * DENOMINATION_FACTOR / DENOM
+                    else:
+                        pair.quote_price = int(result["result"]["amount_without_impact"]) / DENOM
                 else:
                     pair.quote_price = None
                 session.add(pair)
