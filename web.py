@@ -19,11 +19,10 @@ from starlette.graphql import GraphQLApp
 from starlette.responses import JSONResponse
 
 from models import Burn, BuyBack, Pair, Swap, Token
-from processing import XOR_ID, XSTUSD_ID, KUSD_ID, VXOR_ID, DAI_ID, XST_ID
+from processing import XSTUSD_ID, KUSD_ID, VXOR_ID, DAI_ID, XST_ID, XOR_ID_INT
 
 WHITELIST_URL = "https://raw.githubusercontent.com/sora-xor/polkaswap-token-whitelist-config/master/whitelist.json"  # noqa
 
-XOR_ID_INT = int(XOR_ID, 16)
 XSTUSD_ID_INT = int(XSTUSD_ID, 16)
 KUSD_ID_INT = int(KUSD_ID, 16)
 VXOR_ID_INT = int(VXOR_ID, 16)
