@@ -25,6 +25,8 @@ from processing import (
     XSTUSD_ID,
     KUSD_ID,
     VXOR_ID,
+    XOR_ID_INT,
+    TBCD_ID_INT,
     get_processing_functions,
     get_timestamp,
     get_value,
@@ -39,9 +41,17 @@ SWAP_FEE_ASSETS = {}
 
 POLL_INTERVAL = 60
 
+DENOMINATION_FACTOR = 10 ** 16
+
 # BLOCK_IMPORT_LIMIT = 10 # In blocks, 0, None or float("inf") - to not stop
 
 # WAIT_FOR_NEXT_IMPORT = 4 # In seconds
+
+def calculate_value_after_denomination(asset_id: int, value: int, block: int, denominate_block: int) -> int:
+    if (asset_id == XOR_ID_INT or asset_id == TBCD_ID_INT) and block >= denominate_block:
+        return value * DENOMINATION_FACTOR
+    else:
+        return value
 
 def get_fee_price_func(substrate, block_hash, pairs):
     xor_id_int = int(XOR_ID, 16)
@@ -293,7 +303,7 @@ def get_event_param(event, param_idx):
     return get_value(attribute)
 
 
-async def async_main(async_session, begin=1, clean=False, silent=False):
+async def async_main(async_session, begin=1, clean=False, silent=False, denominate_block=1):
     # if clean:
     #     async with db.engine.begin() as conn:
     #         await conn.run_sync(models.Base.metadata.drop_all)
@@ -438,8 +448,8 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                                 to_asset,
                                 Swap(
                                     block=block,
-                                    from_amount=from_amount,
-                                    to_amount=to_amount,
+                                    from_amount=calculate_value_after_denomination(from_asset, from_amount, block, denominate_block),
+                                    to_amount=calculate_value_after_denomination(to_asset, to_amount, block, denominate_block),
                                     **tx
                                 )
                             )
@@ -503,7 +513,7 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                                 block=block,
                                 timestamp=timestamp,
                                 token_id=xor_id_int,
-                                amount=xor_burned_estimated,
+                                amount=xor_burned_estimated * DENOMINATION_FACTOR,
                             )
                         )
                         if len(events) > idx + 2:
@@ -521,7 +531,7 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                                         block=block,
                                         timestamp=timestamp,
                                         token_id=xor_id_int,
-                                        amount=xor_dedicated_for_buy_back,
+                                        amount=xor_dedicated_for_buy_back * DENOMINATION_FACTOR,
                                     )
                                 )
                         if len(events) > idx + 10:
@@ -603,7 +613,12 @@ async def async_main(async_session, begin=1, clean=False, silent=False):
                 result = substrate.rpc_request("liquidityProxy_quote", params)
                 pair = pairs[swap[1], swap[2]]
                 if result["result"] is not None:
-                    pair.quote_price = int(result["result"]["amount_without_impact"]) / DENOM
+                    if block >= denominate_block and input_asset_id == XOR_ID and output_asset_id != TBCD_ID_INT:
+                        pair.quote_price = int(result["result"]["amount_without_impact"]) / (DENOM * DENOMINATION_FACTOR)
+                    elif block >= denominate_block and (output_asset_id == XOR_ID or output_asset_id == TBCD_ID_INT):
+                        pair.quote_price = int(result["result"]["amount_without_impact"]) * DENOMINATION_FACTOR / DENOM
+                    else:
+                        pair.quote_price = int(result["result"]["amount_without_impact"]) / DENOM
                 else:
                     pair.quote_price = None
                 session.add(pair)
@@ -632,7 +647,7 @@ async def async_main_loop(async_session, args):
     Run import in an infinite loop.
     """
     while True:
-        await async_main(async_session, args.begin, args.clean, args.silent)
+        await async_main(async_session, args.begin, args.clean, args.silent, args.denominate_block)
         if not args.silent:
             logging.info("Waiting for new blocks...")
         await asyncio.sleep(decouple.config("POLL_INTERVAL", default=POLL_INTERVAL, cast=int))
@@ -661,6 +676,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--follow", "-f", action="store_true", help="continiously poll for new blocks"
     )
+    parser.add_argument(
+        "--denominate-block", "-d", type=int, default=1, help="block when xor denomination started"
+    )
     args = parser.parse_args()
     logging.basicConfig(
         format="%(asctime)s %(levelname)s %(message)s",
@@ -672,4 +690,4 @@ if __name__ == "__main__":
         asyncio.run(async_main_loop(async_session, args))
     else:
         asyncio.run(async_main(async_session,
-                    args.begin, args.clean, args.silent))
+                    args.begin, args.clean, args.silent, args.denominate_block))
